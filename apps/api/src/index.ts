@@ -73,6 +73,14 @@ app.use("*", async (c, next) => {
   return corsMiddleware(c, next);
 });
 
+app.get("/", (c) =>
+  c.json({
+    ok: true,
+    service: "whenlist-api",
+    hint: "This is the API Worker, not the web UI. Try GET /api/health or /api/checklist.",
+  }),
+);
+
 app.get("/api/health", (c) =>
   c.json({ ok: true, timezone: c.env.APP_TIMEZONE || "Asia/Jakarta" }),
 );
