@@ -42,6 +42,7 @@ const REF_CANON: Record<string, string> = {
   weekday: "weekday",
   lastday: "lastDay",
   monthlength: "monthLength",
+  prevlastday: "prevLastDay",
 };
 
 export function parse(input: string): AstNode {
@@ -208,6 +209,7 @@ export function parse(input: string): AstNode {
       case "year":
       case "lastDay":
       case "monthLength":
+      case "prevLastDay":
         return parseIntLit(field);
       case "month":
         return parseMonthLit();
@@ -228,7 +230,10 @@ export function parse(input: string): AstNode {
     const t = consume("INT", "number");
     const n = Number(t.value);
     if (
-      (field === "date" || field === "lastDay" || field === "monthLength") &&
+      (field === "date" ||
+        field === "lastDay" ||
+        field === "monthLength" ||
+        field === "prevLastDay") &&
       (n < 1 || n > 31)
     ) {
       throw new ParseError(`${field} must be 1–31, got ${n}`, t.pos);
@@ -391,7 +396,8 @@ export function parse(input: string): AstNode {
         field === "hour" ||
         field === "year" ||
         field === "lastDay" ||
-        field === "monthLength"
+        field === "monthLength" ||
+        field === "prevLastDay"
       ) {
         // If single INT and no following arithmetic, keep as num (with range check)
         if (
@@ -420,7 +426,8 @@ export function parse(input: string): AstNode {
           field === "hour" ||
           field === "year" ||
           field === "lastDay" ||
-          field === "monthLength"
+          field === "monthLength" ||
+          field === "prevLastDay"
         ) {
           throw e;
         }

@@ -8,6 +8,8 @@ import {
   findCycle,
   topologicalSort,
   deriveWindowStart,
+  findNextWindowStart,
+  findPrevWindowStart,
   deriveRemindAt,
   resolveAutoRemind,
   isEffectivelyChecked,
@@ -240,6 +242,34 @@ describe("evaluate", () => {
     ).toBe(true);
   });
 
+  it("prevLastDay is previous month length", () => {
+    // July 2026 → June has 30 days
+    expect(evaluate(parse("prevLastDay == 30"), ctx())).toBe(true);
+    expect(evaluate(parse("prevLastDay == 31"), ctx())).toBe(false);
+    const mid = parse(`let prev = prevLastDay;
+let mid = 25 + ceil(prev / 2) - prev;
+(date == mid - 1 && weekday between sun .. thu) ||
+(date == mid - 2 && weekday == thu) ||
+(date == mid - 3 && weekday == thu)`);
+    // mid = 10 → candidates 9/8/7; Jul 9 2026 is Thu → true
+    expect(
+      evaluate(mid, {
+        now: jakarta("2026-07-09T12:00:00"),
+        statusMap: {},
+        selfId: "1",
+        timeZone: TZ,
+      }),
+    ).toBe(true);
+    expect(
+      evaluate(mid, {
+        now: jakarta("2026-07-15T12:00:00"),
+        statusMap: {},
+        selfId: "1",
+        timeZone: TZ,
+      }),
+    ).toBe(false);
+  });
+
   it("month == jul", () => {
     expect(evaluate(parse("month == jul"), ctx())).toBe(true);
     expect(evaluate(parse("month == 7"), ctx())).toBe(true);
@@ -459,6 +489,44 @@ describe("window derivation", () => {
     const w = deriveWindowStart(ast, { now, statusMap: {}, timeZone: TZ });
     expect(w.currentlyValid).toBe(true);
     expect(w.unbounded).toBe(true);
+  });
+
+  it("findNext / findPrev window for date == 15", () => {
+    const ast = parse("date == 15");
+    const mid = jakarta("2026-07-20T12:00:00");
+    const ctx = { now: mid, statusMap: {}, timeZone: TZ };
+    const next = findNextWindowStart(ast, ctx);
+    expect(next).not.toBeNull();
+    expect(extractTimeParts(new Date(next!), TZ)).toMatchObject({
+      date: 15,
+      month: 8,
+      year: 2026,
+    });
+    const prev = findPrevWindowStart(ast, ctx);
+    expect(prev).not.toBeNull();
+    expect(extractTimeParts(new Date(prev!), TZ)).toMatchObject({
+      date: 15,
+      month: 7,
+      year: 2026,
+    });
+    // From inside a window, next skips ahead and prev goes to prior month
+    const onDay = jakarta("2026-07-15T12:00:00");
+    const nextFromOn = findNextWindowStart(ast, {
+      now: onDay,
+      statusMap: {},
+      timeZone: TZ,
+    });
+    expect(extractTimeParts(new Date(nextFromOn!), TZ).month).toBe(8);
+    const prevFromOn = findPrevWindowStart(ast, {
+      now: onDay,
+      statusMap: {},
+      timeZone: TZ,
+    });
+    expect(extractTimeParts(new Date(prevFromOn!), TZ)).toMatchObject({
+      date: 15,
+      month: 6,
+      year: 2026,
+    });
   });
 
   it("effective checked once mode", () => {

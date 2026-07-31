@@ -138,6 +138,52 @@ export function findNextWindowStart(
 }
 
 /**
+ * Start of the previous validity window *before* any current one.
+ * If currently true, exits this window first, then finds the prior true run
+ * and walks to its start. Returns null if always-true or none within horizon.
+ */
+export function findPrevWindowStart(
+  ast: AstNode,
+  ctx: EvalContext,
+): string | null {
+  const timeZone = ctx.timeZone ?? "Asia/Jakarta";
+  const { stepMs, maxSteps } = stepConfig(ast);
+  let cursor = new Date(ctx.now.getTime());
+  let steps = 0;
+
+  if (evaluate(ast, ctx)) {
+    while (steps < maxSteps) {
+      cursor = new Date(cursor.getTime() - stepMs);
+      steps++;
+      if (!evaluate(ast, { ...ctx, now: cursor, timeZone })) break;
+    }
+    if (evaluate(ast, { ...ctx, now: cursor, timeZone })) {
+      return null; // never leaves current window
+    }
+  }
+
+  while (steps < maxSteps) {
+    cursor = new Date(cursor.getTime() - stepMs);
+    steps++;
+    if (evaluate(ast, { ...ctx, now: cursor, timeZone })) {
+      let lastTrue = new Date(cursor.getTime());
+      while (steps < maxSteps) {
+        const prev = new Date(cursor.getTime() - stepMs);
+        steps++;
+        if (!evaluate(ast, { ...ctx, now: prev, timeZone })) {
+          return lastTrue.toISOString();
+        }
+        cursor = prev;
+        lastTrue = prev;
+      }
+      return null; // still true past scan horizon
+    }
+  }
+
+  return null;
+}
+
+/**
  * Arm a remind *before* the checklist item appears.
  * remindAt = one formula step (hour/day) before the next validity window.
  */

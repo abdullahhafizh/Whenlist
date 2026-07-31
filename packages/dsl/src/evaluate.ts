@@ -110,6 +110,8 @@ function currentOrdinal(field: TimeField, parts: TimeParts): number {
     case "lastDay":
     case "monthLength":
       return daysInMonth(parts.year, parts.month);
+    case "prevLastDay":
+      return daysInMonth(parts.year, parts.month - 1);
   }
 }
 

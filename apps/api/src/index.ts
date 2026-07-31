@@ -735,82 +735,15 @@ async function buildStatusMap(
 }
 
 app.get("/api/checklist/count", async (c) => {
-  // Count items that would appear on the checklist now (same rules as GET /api/checklist),
-  // not all active rows — entrance drop shells must match visible cards.
-  const timeZone = c.env.APP_TIMEZONE || "Asia/Jakarta";
-  const now = new Date();
-  const deps = await loadAllDeps(c.env.DB);
-  const { results } = await c.env.DB.prepare(
-    `SELECT * FROM checklist_items WHERE is_active = 1 AND ${LIVE} ORDER BY sort_order ASC, id ASC`,
-  ).all<ItemRow>();
-  const items = results ?? [];
-  const ids = items.map((i) => i.id);
-  let order: string[];
-  try {
-    order = topologicalSort(ids, deps);
-  } catch {
-    order = ids;
-  }
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const statusMap: Record<string, boolean> = {};
-  for (const id of order) {
-    const row = byId.get(id)!;
-    let ast: AstNode;
-    try {
-      ast = parse(row.formula);
-    } catch {
-      continue;
-    }
-    const currentWindow = deriveWindowStart(ast, {
-      now,
-      statusMap,
-      selfId: id,
-      timeZone,
-    });
-    statusMap[id] = isEffectivelyChecked({
-      completionMode: row.completion_mode,
-      checkedAt: row.checked_at,
-      windowStartAt: row.window_start_at,
-      currentWindow,
-    });
-  }
-
-  let total = 0;
-  for (const row of items) {
-    let ast: AstNode;
-    try {
-      ast = parse(row.formula);
-    } catch {
-      continue;
-    }
-    const currentlyValid = evaluate(ast, {
-      now,
-      statusMap,
-      selfId: row.id,
-      timeZone,
-    });
-    if (!currentlyValid) continue;
-    const currentWindow = deriveWindowStart(ast, {
-      now,
-      statusMap,
-      selfId: row.id,
-      timeZone,
-    });
-    const hourly = usesHourGranularity(ast);
-    const snoozed = isSnoozedAway({
-      completionMode: row.completion_mode,
-      snoozedWindowAt: row.snoozed_window_at,
-      currentWindow,
-      now,
-      hourly,
-      timeZone,
-    });
-    if (snoozed) continue;
-    if (row.completion_mode === "once" && Boolean(statusMap[row.id])) continue;
-    total += 1;
-  }
-
-  return c.json({ total });
+  // Aesthetic pile only: always-visible rows (once + empty formula).
+  // Scheduled / due-now filtering stays in GET /api/checklist — too heavy for COUNT.
+  const row = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS total FROM checklist_items
+     WHERE is_active = 1 AND ${LIVE}
+       AND completion_mode = 'once'
+       AND TRIM(formula) = ''`,
+  ).first<{ total: number }>();
+  return c.json({ total: Number(row?.total ?? 0) });
 });
 
 app.get("/api/checklist", async (c) => {

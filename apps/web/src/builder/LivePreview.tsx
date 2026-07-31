@@ -2,10 +2,21 @@ import { useMemo, useState } from "react";
 import {
   evaluate,
   extractTimeParts,
+  findNextWindowStart,
+  findPrevWindowStart,
+  usesHourGranularity,
   type AstNode,
 } from "@whenlist/dsl";
 import DateTimePicker from "./DateTimePicker";
-import { card, sectionTitle, statusFalse, statusNeutral, statusTrue } from "../ui/styles";
+import {
+  card,
+  sectionTitle,
+  statusFalse,
+  statusNeutral,
+  statusTrue,
+} from "../ui/styles";
+
+const TZ = "Asia/Jakarta";
 
 type Props = {
   ast: AstNode | null;
@@ -13,32 +24,67 @@ type Props = {
   statusMap: Record<string, boolean>;
 };
 
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** Round-trip an absolute ISO into the picker's local `YYYY-MM-DDTHH:mm` string. */
+function isoToLocalPicker(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatWindow(iso: string, hourly: boolean): string {
+  const p = extractTimeParts(new Date(iso), TZ);
+  const day = `${p.year}-${pad(p.month)}-${pad(p.date)}`;
+  return hourly ? `${day} ${pad(p.hour)}:00` : day;
+}
+
 export default function LivePreview({ ast, selfId, statusMap }: Props) {
   const [localIso, setLocalIso] = useState(() => {
     const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   });
 
   const now = useMemo(() => new Date(localIso), [localIso]);
-  const parts = useMemo(
-    () => extractTimeParts(now, "Asia/Jakarta"),
-    [now],
+  const parts = useMemo(() => extractTimeParts(now, TZ), [now]);
+
+  const evalCtx = useMemo(
+    () => ({ now, statusMap, selfId, timeZone: TZ }),
+    [now, statusMap, selfId],
   );
 
   const result = useMemo(() => {
     if (!ast) return null;
     try {
-      return evaluate(ast, {
-        now,
-        statusMap,
-        selfId,
-        timeZone: "Asia/Jakarta",
-      });
+      return evaluate(ast, evalCtx);
     } catch {
       return null;
     }
-  }, [ast, now, statusMap, selfId]);
+  }, [ast, evalCtx]);
+
+  const hourly = useMemo(
+    () => (ast ? usesHourGranularity(ast) : false),
+    [ast],
+  );
+
+  const prevIso = useMemo(() => {
+    if (!ast || result === null) return null;
+    try {
+      return findPrevWindowStart(ast, evalCtx);
+    } catch {
+      return null;
+    }
+  }, [ast, evalCtx, result]);
+
+  const nextIso = useMemo(() => {
+    if (!ast || result === null) return null;
+    try {
+      return findNextWindowStart(ast, evalCtx);
+    } catch {
+      return null;
+    }
+  }, [ast, evalCtx, result]);
 
   return (
     <div className={`${card} p-3`}>
@@ -89,6 +135,42 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
             ? "Showing now"
             : "Hidden now"}
       </div>
+      <dl className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-slate-600">
+        <div>
+          <dt className="text-slate-400">Previous</dt>
+          <dd className="font-mono tabular-nums">
+            {prevIso ? (
+              <button
+                type="button"
+                className="text-left text-teal-700 underline-offset-2 hover:underline"
+                title="Jump to this time"
+                onClick={() => setLocalIso(isoToLocalPicker(prevIso))}
+              >
+                {formatWindow(prevIso, hourly)}
+              </button>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">Next</dt>
+          <dd className="font-mono tabular-nums">
+            {nextIso ? (
+              <button
+                type="button"
+                className="text-left text-teal-700 underline-offset-2 hover:underline"
+                title="Jump to this time"
+                onClick={() => setLocalIso(isoToLocalPicker(nextIso))}
+              >
+                {formatWindow(nextIso, hourly)}
+              </button>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }

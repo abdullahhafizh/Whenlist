@@ -39,7 +39,7 @@ Precedence: ! > && > ||
 ## Time fields (as predicate LHS)
 date | month | year | hour | weekday | meridiem
 | dateMonth | monthYear | dateMonthYear
-| lastDay | monthLength
+| lastDay | monthLength | prevLastDay
 
 Meanings:
 - date: day of month 1–31
@@ -52,6 +52,7 @@ Meanings:
 - monthYear: month+year (MM-YYYY or mon-YYYY)
 - dateMonthYear: full date (DD-MM-YYYY or DD-mon-YYYY)
 - lastDay / monthLength: days in the current month (aliases; usable as field or numeric ref)
+- prevLastDay: days in the previous calendar month
 
 ## Compare
 field cmp value_expr
@@ -100,7 +101,7 @@ notChecked("ITEM_ID")
 ## Value expressions (RHS of compare/between; fn/let bodies)
 Arithmetic: + - * / and unary + -
 Grouping: ( expr )
-Numeric refs: date, month, year, hour, weekday, lastDay, monthLength
+Numeric refs: date, month, year, hour, weekday, lastDay, monthLength, prevLastDay
   (NOT meridiem / dateMonth / monthYear / dateMonthYear as bare numeric refs)
 
 Built-in calls:

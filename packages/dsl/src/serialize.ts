@@ -22,6 +22,7 @@ function litToString(field: TimeField, value: FieldLiteral): string {
     case "year":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return String(value as number);
     case "month":
       if (typeof value === "number") return NUM_TO_MONTH[value] ?? String(value);

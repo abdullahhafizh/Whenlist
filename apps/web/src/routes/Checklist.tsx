@@ -7,6 +7,12 @@ import SwipeToDelete from "../ui/SwipeToDelete";
 import Holdable from "../ui/Holdable";
 import { describeWhen, modeBadge } from "../ui/describeWhen";
 import PageLoader from "../ui/PageLoader";
+import {
+  buildSharePayload,
+  parseShareClipboard,
+  shareOrCopyItem,
+  writeShareClipboard,
+} from "../shareItem";
 
 const PRESS_MS = 280;
 /** Time the checked row stays visible (with progress line) before exit. */
@@ -18,7 +24,7 @@ const UNDO_WINDOW_MS = 5000;
 const UNDO_FLASH_MS = 900;
 /** First paint + each “load more” chunk — keep small for instant feel. */
 const PAGE_SIZE = 10;
-/** Empty stack shells from total count (aesthetic); real interactive rows stay PAGE_SIZE. */
+/** Empty stack shells from always-visible count (aesthetic); real rows stay PAGE_SIZE. */
 const DROP_SLOT_CAP = 60;
 
 /**
@@ -59,7 +65,7 @@ export default function Checklist() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
-  /** Stack size for entrance drop — visible checklist count, not all DB rows. */
+  /** Stack size for entrance drop — hint from always-visible COUNT, capped. */
   const [dropSlots, setDropSlots] = useState(0);
   const [entranceOn, setEntranceOn] = useState(false);
   /** hold = piled & waiting to paint; drop = peeling off */
@@ -83,6 +89,8 @@ export default function Checklist() {
   const [snoozeOutIds, setSnoozeOutIds] = useState<Set<string>>(() => new Set());
   const [undoFlashIds, setUndoFlashIds] = useState<Set<string>>(() => new Set());
   const [undoInIds, setUndoInIds] = useState<Set<string>>(() => new Set());
+  /** Newly due / newly appeared after first entrance — soft slide-in, not stack drop. */
+  const [softEnterIds, setSoftEnterIds] = useState<Set<string>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<{
     item: ChecklistItemView;
     index: number;
@@ -90,6 +98,8 @@ export default function Checklist() {
   const [holdMenuItem, setHoldMenuItem] = useState<ChecklistItemView | null>(
     null,
   );
+  const [shareFlash, setShareFlash] = useState<string | null>(null);
+  const pastingRef = useRef(false);
   const pendingRemoveRef = useRef<Set<string>>(new Set());
   const exitingRef = useRef<Set<string>>(new Set());
   const pendingDeleteIdRef = useRef<string | null>(null);
@@ -157,6 +167,8 @@ export default function Checklist() {
     const offset = mode === "append" ? nextOffsetRef.current : 0;
     const limit = PAGE_SIZE;
     let fetchedLen = 0;
+    const softEnterEligible =
+      mode === "replace" && entranceDoneRef.current;
 
     try {
       setError(null);
@@ -170,7 +182,7 @@ export default function Checklist() {
       fetchedLen = data.items.length;
 
       if (countRes && typeof countRes.total === "number") {
-        // Hint only — final slot count is resolved after we know hasMore.
+        // Always-visible COUNT — pile hint only; resolved with hasMore below.
         dropSlotsRef.current = Math.min(
           Math.max(0, countRes.total),
           DROP_SLOT_CAP,
@@ -194,6 +206,37 @@ export default function Checklist() {
             .slice(0, Math.max(0, itemsLenRef.current - PAGE_SIZE));
           const next = mergeKeepLocal(prev, [...head, ...tail]);
           itemsLenRef.current = next.length;
+
+          if (softEnterEligible) {
+            const prevIds = new Set(prev.map((i) => i.id));
+            const newcomers = next
+              .filter((i) => !prevIds.has(i.id))
+              .map((i) => i.id);
+            if (newcomers.length > 0) {
+              queueMicrotask(() => {
+                setSoftEnterIds((s) => {
+                  const n = new Set(s);
+                  for (const id of newcomers) n.add(id);
+                  return n;
+                });
+                for (const id of newcomers) {
+                  clearItemTimers(`soft-${id}`);
+                  timersRef.current.set(
+                    `soft-${id}`,
+                    setTimeout(() => {
+                      setSoftEnterIds((s) => {
+                        const n = new Set(s);
+                        n.delete(id);
+                        return n;
+                      });
+                      timersRef.current.delete(`soft-${id}`);
+                    }, 480),
+                  );
+                }
+              });
+            }
+          }
+
           return next;
         });
         setAlerts(data.alerts ?? []);
@@ -233,8 +276,8 @@ export default function Checklist() {
         setLoading(false);
         if (!entranceDoneRef.current) {
           entranceDoneRef.current = true;
-          // Exact visible page when no more pages — never invent ghost cards.
-          // Only pad with shells when hasMore (count = currently-visible total).
+          // Exact page when no more — never invent ghosts.
+          // With hasMore, always-visible COUNT pads the entrance pile.
           const slots = hasMoreRef.current
             ? Math.min(
                 DROP_SLOT_CAP,
@@ -594,6 +637,94 @@ export default function Checklist() {
     );
   };
 
+  const flashShare = (msg: string) => {
+    setShareFlash(msg);
+    clearItemTimers("share-flash");
+    timersRef.current.set(
+      "share-flash",
+      setTimeout(() => setShareFlash(null), 2200),
+    );
+  };
+
+  const copyHoldItem = async (item: ChecklistItemView) => {
+    try {
+      await writeShareClipboard(
+        buildSharePayload({
+          label: item.label,
+          formula: item.formula,
+          completionMode: item.completionMode,
+          allowRemind: item.allowRemind,
+        }),
+      );
+      flashShare("Copied — ⌘V / Ctrl+V on Checklist to import");
+    } catch (e) {
+      setError((e as Error).message || "Could not copy");
+    }
+  };
+
+  const shareHoldItem = async (item: ChecklistItemView) => {
+    try {
+      const result = await shareOrCopyItem(
+        buildSharePayload({
+          label: item.label,
+          formula: item.formula,
+          completionMode: item.completionMode,
+          allowRemind: item.allowRemind,
+        }),
+      );
+      flashShare(
+        result === "shared"
+          ? "Shared"
+          : "Copied — ⌘V / Ctrl+V on Checklist to import",
+      );
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setError((e as Error).message || "Could not share");
+    }
+  };
+
+  const pasteSharedItem = useCallback(
+    async (payload: NonNullable<ReturnType<typeof parseShareClipboard>>) => {
+      if (pastingRef.current) return;
+      pastingRef.current = true;
+      setError(null);
+      try {
+        await api.createItem({
+          label: payload.label,
+          formula: payload.formula,
+          completionMode: payload.completionMode,
+          allowRemind: Boolean(payload.allowRemind),
+        });
+        flashShare(`Added “${payload.label}”`);
+        await load("replace");
+      } catch (e) {
+        setError((e as Error).message || "Paste failed");
+      } finally {
+        pastingRef.current = false;
+      }
+    },
+    [load],
+  );
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.closest("input, textarea, select, [contenteditable='true']") ||
+        el?.isContentEditable
+      ) {
+        return;
+      }
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      const payload = parseShareClipboard(text);
+      if (!payload) return;
+      e.preventDefault();
+      void pasteSharedItem(payload);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [pasteSharedItem]);
+
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-lg space-y-4 overflow-x-hidden">
@@ -630,6 +761,12 @@ export default function Checklist() {
         )}
       </div>
 
+      {shareFlash && (
+        <p className={banner.info} role="status">
+          {shareFlash}
+        </p>
+      )}
+
       {error && (
         <div className={banner.error}>
           {error}
@@ -643,7 +780,7 @@ export default function Checklist() {
         </div>
       )}
 
-      {alerts.length > 0 && (
+      {alerts.length > 0 && !error && (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">
             Reminders
@@ -680,7 +817,7 @@ export default function Checklist() {
         </section>
       )}
 
-      {items.length === 0 && alerts.length === 0 ? (
+      {error ? null : items.length === 0 && alerts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
           <p className="text-slate-600">Nothing due right now.</p>
           <p className="mt-1 text-sm text-slate-400">
@@ -705,6 +842,7 @@ export default function Checklist() {
             const snoozeOut = snoozeOutIds.has(item.id);
             const undoIn = undoInIds.has(item.id);
             const undoFlash = undoFlashIds.has(item.id);
+            const softEnter = softEnterIds.has(item.id);
             const canToggle =
               !exiting &&
               !swipeOut &&
@@ -719,6 +857,8 @@ export default function Checklist() {
                   snoozeOut ? "is-swipe-out-right" : ""
                 } ${
                   undoIn ? "is-undo-in" : ""
+                } ${
+                  softEnter ? "is-soft-enter" : ""
                 } ${
                   fallPhase !== "off" && index < PAGE_SIZE
                     ? "is-fall-uniform"
@@ -996,6 +1136,38 @@ export default function Checklist() {
                   {holdMenuItem.checked ? "✓" : ""}
                 </span>
                 {holdMenuItem.checked ? "Uncheck" : "Check"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = holdMenuItem;
+                  setHoldMenuItem(null);
+                  void copyHoldItem(target);
+                }}
+              >
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600"
+                  aria-hidden
+                >
+                  ⎘
+                </span>
+                Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = holdMenuItem;
+                  setHoldMenuItem(null);
+                  void shareHoldItem(target);
+                }}
+              >
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-50 text-[10px] font-bold text-teal-800"
+                  aria-hidden
+                >
+                  ↗
+                </span>
+                Share
               </button>
               <button
                 type="button"

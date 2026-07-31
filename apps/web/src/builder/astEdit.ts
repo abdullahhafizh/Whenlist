@@ -33,6 +33,7 @@ function defaultLit(field: TimeField): FieldLiteral {
     case "date":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return field === "date" ? 1 : 31;
     case "hour":
       return 9;
@@ -122,6 +123,7 @@ export const PALETTE: PaletteItem[] = [
     "dateMonthYear",
     "lastDay",
     "monthLength",
+    "prevLastDay",
   ] as TimeField[]).flatMap((field) => {
     const names: Record<string, string> = {
       date: "Day",
@@ -135,6 +137,7 @@ export const PALETTE: PaletteItem[] = [
       dateMonthYear: "Full date",
       lastDay: "Month end",
       monthLength: "Days in month",
+      prevLastDay: "Prev month end",
     };
     const n = names[field] ?? field;
     return [

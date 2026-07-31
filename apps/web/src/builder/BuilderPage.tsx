@@ -13,6 +13,7 @@ import {
 import { api, shortId, type ItemRecord } from "../api";
 import Palette from "../builder/Palette";
 import BlockNode, { dropPaletteNode } from "../builder/BlockNode";
+import DropSlot from "../builder/DropSlot";
 import LivePreview from "../builder/LivePreview";
 import {
   createDefaultNode,
@@ -29,6 +30,11 @@ import {
 import { useAstHistory } from "../builder/useAstHistory";
 import { btn, field, banner, pageTitle, sectionTitle } from "../ui/styles";
 import PageLoader from "../ui/PageLoader";
+import {
+  buildSharePayload,
+  shareOrCopyItem,
+  writeShareClipboard,
+} from "../shareItem";
 
 const PAGE_SIZE = 10;
 
@@ -99,6 +105,7 @@ export default function Builder() {
   const [text, setText] = useState("");
   const [textError, setTextError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [shareFlash, setShareFlash] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -665,6 +672,101 @@ export default function Builder() {
     setDiscardOpen(true);
   };
 
+  const payloadFromFields = (fields: {
+    label: string;
+    formula: string;
+    completionMode: "once" | "while_valid";
+    allowRemind: boolean;
+  }) =>
+    buildSharePayload({
+      label: fields.label,
+      formula: fields.formula,
+      completionMode: fields.completionMode,
+      allowRemind: fields.allowRemind,
+    });
+
+  const copyFormulaText = async () => {
+    const text = formulaText.trim();
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error("Clipboard not available");
+      }
+      setShareFlash("Formula copied");
+      window.setTimeout(() => setShareFlash(null), 2200);
+    } catch (e) {
+      setSaveError((e as Error).message || "Could not copy");
+    }
+  };
+
+  const copyCurrentShare = async () => {
+    if (!label.trim()) {
+      setSaveError("Add a label before copying.");
+      return;
+    }
+    try {
+      await writeShareClipboard(
+        payloadFromFields({
+          label,
+          formula: formulaText,
+          completionMode,
+          allowRemind,
+        }),
+      );
+      setSaveError(null);
+      setShareFlash("Copied — ⌘V / Ctrl+V on Checklist to import");
+      window.setTimeout(() => setShareFlash(null), 2200);
+    } catch (e) {
+      setSaveError((e as Error).message || "Could not copy");
+    }
+  };
+
+  const shareCurrent = async () => {
+    if (!label.trim()) {
+      setSaveError("Add a label before sharing.");
+      return;
+    }
+    try {
+      const result = await shareOrCopyItem(
+        payloadFromFields({
+          label,
+          formula: formulaText,
+          completionMode,
+          allowRemind,
+        }),
+      );
+      setSaveError(null);
+      setShareFlash(
+        result === "shared"
+          ? "Shared"
+          : "Copied — ⌘V / Ctrl+V on Checklist to import",
+      );
+      window.setTimeout(() => setShareFlash(null), 2200);
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setSaveError((e as Error).message || "Could not share");
+    }
+  };
+
+  const copyItemShare = async (it: ItemRecord) => {
+    try {
+      await writeShareClipboard(
+        payloadFromFields({
+          label: it.label,
+          formula: it.formula,
+          completionMode: it.completionMode,
+          allowRemind: Boolean(it.allowRemind),
+        }),
+      );
+      setShareFlash("Copied — ⌘V / Ctrl+V on Checklist to import");
+      window.setTimeout(() => setShareFlash(null), 2200);
+    } catch (e) {
+      setSaveError((e as Error).message || "Could not copy");
+    }
+  };
+
   const cancelDelete = () => {
     if (deleting) return;
     setDeleteTarget(null);
@@ -884,6 +986,24 @@ export default function Builder() {
               {cloningId === editId ? "Cloning…" : "Clone"}
             </button>
           )}
+          <button
+            type="button"
+            disabled={!label.trim()}
+            onClick={() => void copyCurrentShare()}
+            className={btn.secondarySm}
+            title="Copy name, schedule, and formula for someone else to paste"
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            disabled={!label.trim()}
+            onClick={() => void shareCurrent()}
+            className={btn.secondarySm}
+            title="Share a link that opens the import screen"
+          >
+            Share
+          </button>
         </div>
       </div>
 
@@ -892,6 +1012,10 @@ export default function Builder() {
           Builder works best on a laptop. On this screen size the canvas is
           read-only — open on a computer to edit schedules.
         </div>
+      )}
+
+      {shareFlash && (
+        <div className={`shrink-0 ${banner.info}`}>{shareFlash}</div>
       )}
 
       {(saveError || issuesFull.some((i) => i.severity === "error")) && (
@@ -990,6 +1114,14 @@ export default function Builder() {
                           onClick={() => requestClone(it)}
                         >
                           {cloningId === it.id ? "…" : "Clone"}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[10px] font-medium text-slate-600 hover:underline"
+                          onClick={() => void copyItemShare(it)}
+                          title="Copy to share"
+                        >
+                          Copy
                         </button>
                         <button
                           type="button"
@@ -1162,11 +1294,36 @@ export default function Builder() {
                 </button>
               </div>
             </div>
-            <div className="break-all rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-[11px] text-slate-500">
-              {formulaText ||
-                (completionMode === "once"
-                  ? "(empty = always until checked)"
-                  : "(empty schedule)")}
+            <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5">
+              <div className="min-w-0 flex-1 break-all font-mono text-[11px] text-slate-500">
+                {formulaText ||
+                  (completionMode === "once"
+                    ? "(empty = always until checked)"
+                    : "(empty schedule)")}
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-white hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!formulaText.trim()}
+                title="Copy formula"
+                aria-label="Copy formula"
+                onClick={() => void copyFormulaText()}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5"
+                  aria-hidden
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </button>
             </div>
             <p className="text-[11px] text-slate-400">
               <Link to="/help#schedule-rules" className="text-teal-700 underline">
@@ -1208,25 +1365,9 @@ export default function Builder() {
             ) : (
               <div
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
+                onDragOver={(e) => {
                   if (!desktop) return;
                   e.preventDefault();
-                  const palette =
-                    e.dataTransfer.getData("application/x-palette");
-                  if (!palette) return;
-                  const item = JSON.parse(palette) as PaletteItem;
-                  if (!ast || isAlwaysTrue(ast)) {
-                    onDropPalette([], 0, item);
-                    return;
-                  }
-                  onDropPalette(
-                    [],
-                    ast.type === "and" || ast.type === "or"
-                      ? ast.children.length
-                      : 0,
-                    item,
-                  );
                 }}
               >
                 {ast && !isAlwaysTrue(ast) ? (
@@ -1244,9 +1385,23 @@ export default function Builder() {
                     onMove={onMove}
                   />
                 ) : (
-                  <p className="py-12 text-center text-sm text-slate-400">
-                    Drop blocks here from the palette
-                  </p>
+                  <DropSlot
+                    variant="canvas"
+                    disabled={!desktop}
+                    className="min-h-[12rem]"
+                    onDrop={(e) => {
+                      if (!desktop) return;
+                      const palette =
+                        e.dataTransfer.getData("application/x-palette");
+                      if (!palette) return;
+                      const item = JSON.parse(palette) as PaletteItem;
+                      onDropPalette([], 0, item);
+                    }}
+                  >
+                    <p className="py-8 text-center text-sm text-slate-400">
+                      Drop blocks here from the palette
+                    </p>
+                  </DropSlot>
                 )}
               </div>
             )}

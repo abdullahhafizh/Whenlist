@@ -157,6 +157,7 @@ A || B          either
                     ["monthYear", "Month+year (07-2026)"],
                     ["dateMonthYear", "Full date"],
                     ["lastDay / monthLength", "Days in this month"],
+                    ["prevLastDay", "Days in previous month"],
                   ] as const
                 ).map(([f, m]) => (
                   <tr key={f}>

@@ -43,6 +43,7 @@ function LitInput({
     case "year":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return (
         <input
           type="number"
@@ -50,7 +51,10 @@ function LitInput({
           value={value as number}
           min={field === "hour" ? 0 : 1}
           max={
-            field === "date" || field === "lastDay" || field === "monthLength"
+            field === "date" ||
+            field === "lastDay" ||
+            field === "monthLength" ||
+            field === "prevLastDay"
               ? 31
               : field === "hour"
                 ? 23

@@ -24,13 +24,13 @@
  * call_expr   ::= IDENT "(" [value_expr ("," value_expr)*] ")" | atom
  * atom        ::= INT | IDENT | field_literal_composite | "(" value_expr ")"
  *
- * Built-in refs (numeric): date, month, year, hour, weekday, lastDay, monthLength
+ * Built-in refs (numeric): date, month, year, hour, weekday, lastDay, monthLength, prevLastDay
  * Built-in calls: ceil, floor, round, abs, min, max
  * Custom fn: defined via fn_def; body is value_expr; call by name
  *
  * field       ::= "date" | "month" | "year" | "hour" | "weekday" | "meridiem"
  *               | "dateMonth" | "monthYear" | "dateMonthYear"
- *               | "lastDay" | "monthLength"
+ *               | "lastDay" | "monthLength" | "prevLastDay"
  *
  * cmp_op      ::= "==" | "!=" | ">=" | "<=" | ">" | "<"
  *
@@ -51,7 +51,8 @@ export type TimeField =
   | "monthYear"
   | "dateMonthYear"
   | "lastDay"
-  | "monthLength";
+  | "monthLength"
+  | "prevLastDay";
 
 export type CmpOp = "==" | "!=" | ">=" | "<=" | ">" | "<";
 
@@ -196,6 +197,7 @@ export const TIME_FIELDS: readonly TimeField[] = [
   "dateMonthYear",
   "lastDay",
   "monthLength",
+  "prevLastDay",
 ] as const;
 
 export const CYCLIC_FIELDS: ReadonlySet<TimeField> = new Set([
@@ -279,6 +281,7 @@ export const NUMERIC_REFS = [
   "weekday",
   "lastDay",
   "monthLength",
+  "prevLastDay",
 ] as const;
 
 export type NumericRef = (typeof NUMERIC_REFS)[number];

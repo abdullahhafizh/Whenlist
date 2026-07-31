@@ -33,6 +33,7 @@ export function fieldLiteralToValueExpr(
     case "year":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return { type: "num", value: lit as number };
     case "month":
     case "weekday":
@@ -74,6 +75,7 @@ export function valueExprToFieldLiteral(
     case "year":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return e.type === "num" ? e.value : null;
     case "month":
       if (e.type === "num") return e.value;
@@ -104,6 +106,7 @@ export function ordinalFromLiteral(field: TimeField, lit: FieldLiteral): number 
     case "year":
     case "lastDay":
     case "monthLength":
+    case "prevLastDay":
       return lit as number;
     case "month":
       return monthValue(lit);
@@ -142,6 +145,9 @@ function resolveRef(name: string, parts: ValueTimeParts): number {
     case "lastday":
     case "monthlength":
       return daysInMonth(parts.year, parts.month);
+    case "prevlastday":
+      // Calendar month N → Date.UTC(y, N-1, 0) = last day of previous month
+      return daysInMonth(parts.year, parts.month - 1);
     default:
       throw new Error(`Unknown reference '${name}'`);
   }

@@ -75,6 +75,7 @@ export {
 export {
   deriveWindowStart,
   findNextWindowStart,
+  findPrevWindowStart,
   deriveRemindAt,
   resolveAutoRemind,
   remindWindowKey,

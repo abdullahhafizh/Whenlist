@@ -1,7 +1,13 @@
 import type { DragEvent } from "react";
-import type { AstNode } from "@whenlist/dsl";
+import { serializeValueExpr, type AstNode } from "@whenlist/dsl";
 import type { ItemRecord } from "../api";
 import BlockForm from "./BlockForm";
+import DropSlot, { isBuilderDrag, markBuilderDragging } from "./DropSlot";
+import {
+  setBuilderDrag,
+  titleForAstType,
+  toneForAstType,
+} from "./builderDrag";
 import {
   createDefaultNode,
   nodeErrors,
@@ -30,6 +36,23 @@ const CONTAINER_COLORS: Record<string, string> = {
   program: "border-teal-300 bg-teal-50/40",
 };
 
+function isStructurallyEmpty(node: AstNode): boolean {
+  switch (node.type) {
+    case "and":
+    case "or":
+      return node.children.length === 0;
+    case "group":
+    case "not":
+      return isStructurallyEmpty(node.child);
+    case "program":
+      return isStructurallyEmpty(node.body);
+    case "true":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export default function BlockNode({
   node,
   path,
@@ -52,10 +75,27 @@ export default function BlockNode({
     node.type === "program";
 
   const onDragStart = (e: DragEvent) => {
-    if (readOnly || path.length === 0) return;
+    if (readOnly) return;
+    if (path.length === 0) return;
     e.dataTransfer.setData("application/x-block-path", JSON.stringify(path));
     e.dataTransfer.effectAllowed = "move";
+    setBuilderDrag(e, {
+      source: "block",
+      title: titleForAstType(node.type),
+      subtitle:
+        node.type === "compare"
+          ? `${node.field} ${node.op}`
+          : node.type === "between"
+            ? `${node.field} between`
+            : undefined,
+      tone: toneForAstType(node.type),
+    });
+    markBuilderDragging(true);
     e.stopPropagation();
+  };
+
+  const onDragEnd = () => {
+    markBuilderDragging(false);
   };
 
   const handleDropZone = (
@@ -93,8 +133,10 @@ export default function BlockNode({
         : node.type === "program"
           ? [node.body]
           : [node.child];
-    const childBasePath =
-      node.type === "and" || node.type === "or" ? path : [...path, 0];
+    const empty = isStructurallyEmpty(node);
+    const isProgram = node.type === "program";
+    const lets = isProgram ? node.lets : [];
+    const fns = isProgram ? node.functions : [];
 
     return (
       <div
@@ -103,7 +145,9 @@ export default function BlockNode({
         }`}
         draggable={!readOnly && path.length > 0}
         onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onDragOver={(e) => {
+          if (!isBuilderDrag(e)) return;
           e.preventDefault();
           e.stopPropagation();
         }}
@@ -138,23 +182,66 @@ export default function BlockNode({
             </div>
           )}
         </div>
+
+        {isProgram && (lets.length > 0 || fns.length > 0) && (
+          <div className="mb-2 space-y-1.5 rounded-lg border border-teal-200 bg-white/90 px-2.5 py-2 shadow-sm">
+            {lets.length > 0 && (
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-teal-700">
+                  Variables
+                </p>
+                <ul className="mt-1 space-y-1">
+                  {lets.map((binding) => (
+                    <li
+                      key={binding.name}
+                      className="flex flex-wrap items-baseline gap-x-1.5 rounded-md bg-teal-50 px-2 py-1 font-mono text-[11px] text-teal-950"
+                    >
+                      <span className="rounded bg-teal-600/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-teal-800">
+                        let
+                      </span>
+                      <span className="font-semibold text-teal-900">
+                        {binding.name}
+                      </span>
+                      <span className="text-teal-500">=</span>
+                      <span className="break-all text-slate-700">
+                        {serializeValueExpr(binding.value)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {fns.length > 0 && (
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-teal-700">
+                  Functions
+                </p>
+                <ul className="mt-1 space-y-1">
+                  {fns.map((fn) => (
+                    <li
+                      key={fn.name}
+                      className="rounded-md bg-teal-50 px-2 py-1 font-mono text-[11px] text-teal-950"
+                    >
+                      <span className="rounded bg-teal-600/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-teal-800">
+                        fn
+                      </span>{" "}
+                      <span className="font-semibold">{fn.name}</span>(
+                      {fn.params.join(", ")}) {"{ "}
+                      {serializeValueExpr(fn.body)}
+                      {" }"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {errs.length > 0 && (
           <p className="mb-1 text-[10px] text-red-600">{errs.join("; ")}</p>
         )}
         <div className="space-y-1.5 pl-1">
           {children.map((child, i) => {
-            const childPath =
-              node.type === "and" || node.type === "or"
-                ? [...path, i]
-                : childBasePath;
-            // For group/not only one child — don't remount incorrectly
-            const actualPath =
-              node.type === "group" || node.type === "not"
-                ? [...path /* child accessed via updateAt */]
-                : childPath;
-
-            // For group/not the path to the child for remove/edit is parentPath + we update via child field.
-            // Our updateAt uses indices into children arrays; for group/not index 0 means .child
             const editPath =
               node.type === "and" || node.type === "or"
                 ? [...path, i]
@@ -163,12 +250,8 @@ export default function BlockNode({
             return (
               <div key={i}>
                 {!readOnly && (node.type === "and" || node.type === "or") && (
-                  <div
-                    className="my-0.5 h-2 rounded border border-dashed border-transparent hover:border-teal-400"
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
+                  <DropSlot
+                    variant="gap"
                     onDrop={(e) => handleDropZone(e, path, i)}
                   />
                 )}
@@ -185,18 +268,13 @@ export default function BlockNode({
                   onDropPalette={onDropPalette}
                   onMove={onMove}
                 />
-                {void actualPath}
               </div>
             );
           })}
           {!readOnly && (node.type === "and" || node.type === "or") && (
-            <button
-              type="button"
-              className="w-full rounded-lg border border-dashed border-slate-300 py-1.5 text-[11px] text-slate-400 hover:border-teal-400 hover:text-teal-700"
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
+            <DropSlot
+              variant="append"
+              empty={empty}
               onDrop={(e) => handleDropZone(e, path, children.length)}
               onClick={() => {
                 const item: PaletteItem = {
@@ -208,15 +286,26 @@ export default function BlockNode({
                 onDropPalette(path, children.length, item);
               }}
             >
-              Drop here or click to add
-            </button>
+              {empty
+                ? "Drop here or click to add"
+                : "Drop here or click to add another"}
+            </DropSlot>
           )}
+          {!readOnly &&
+            (node.type === "group" || node.type === "not") &&
+            empty && (
+              <DropSlot
+                variant="replace"
+                onDrop={(e) => handleDropZone(e, path, 0)}
+              >
+                Drop a block inside
+              </DropSlot>
+            )}
         </div>
       </div>
     );
   }
 
-  // Leaf predicate
   return (
     <div
       className={`flex flex-wrap items-center gap-2 rounded-lg border bg-white px-2 py-1.5 shadow-sm ${
@@ -224,6 +313,7 @@ export default function BlockNode({
       }`}
       draggable={!readOnly}
       onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
     >
       <BlockForm
         node={node}

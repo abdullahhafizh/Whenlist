@@ -1,7 +1,25 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import type { TimeField } from "@whenlist/dsl";
 import type { PaletteItem } from "./astEdit";
 import { PALETTE } from "./astEdit";
+import { markBuilderDragging } from "./DropSlot";
+import { setBuilderDrag, toneForPaletteKind } from "./builderDrag";
+
+function onPaletteDragStart(e: DragEvent, item: PaletteItem) {
+  e.dataTransfer.setData("application/x-palette", JSON.stringify(item));
+  e.dataTransfer.effectAllowed = "copy";
+  setBuilderDrag(e, {
+    source: "palette",
+    title: item.label,
+    subtitle: item.kind,
+    tone: toneForPaletteKind(item.kind),
+  });
+  markBuilderDragging(true);
+}
+
+function onPaletteDragEnd() {
+  markBuilderDragging(false);
+}
 
 type Props = {
   onAdd: (item: PaletteItem) => void;
@@ -19,6 +37,7 @@ const FIELD_ORDER: TimeField[] = [
   "dateMonthYear",
   "lastDay",
   "monthLength",
+  "prevLastDay",
 ];
 
 const FIELD_HINT: Record<TimeField, string> = {
@@ -33,6 +52,7 @@ const FIELD_HINT: Record<TimeField, string> = {
   dateMonthYear: "DD-MM-YYYY",
   lastDay: "last day of month",
   monthLength: "days in this month",
+  prevLastDay: "last day of previous month",
 };
 
 const FIELD_LABEL: Record<TimeField, string> = {
@@ -47,6 +67,7 @@ const FIELD_LABEL: Record<TimeField, string> = {
   dateMonthYear: "Full date",
   lastDay: "Month end",
   monthLength: "Days in month",
+  prevLastDay: "Prev month end",
 };
 
 export default function Palette({ onAdd }: Props) {
@@ -102,13 +123,8 @@ export default function Palette({ onAdd }: Props) {
                 key={item.id}
                 type="button"
                 draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    "application/x-palette",
-                    JSON.stringify(item),
-                  );
-                  e.dataTransfer.effectAllowed = "copy";
-                }}
+                onDragStart={(e) => onPaletteDragStart(e, item)}
+                onDragEnd={onPaletteDragEnd}
                 onClick={() => onAdd(item)}
                 className="w-fit cursor-grab rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900 active:cursor-grabbing hover:bg-amber-100"
               >
@@ -128,13 +144,8 @@ export default function Palette({ onAdd }: Props) {
                 key={item.id}
                 type="button"
                 draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    "application/x-palette",
-                    JSON.stringify(item),
-                  );
-                  e.dataTransfer.effectAllowed = "copy";
-                }}
+                onDragStart={(e) => onPaletteDragStart(e, item)}
+                onDragEnd={onPaletteDragEnd}
                 onClick={() => onAdd(item)}
                 className="w-fit cursor-grab rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-900 active:cursor-grabbing hover:bg-sky-100"
               >
@@ -164,13 +175,8 @@ export default function Palette({ onAdd }: Props) {
                     type="button"
                     draggable
                     title={`${FIELD_LABEL[field]} ${op} · ${FIELD_HINT[field]}`}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(
-                        "application/x-palette",
-                        JSON.stringify(item),
-                      );
-                      e.dataTransfer.effectAllowed = "copy";
-                    }}
+                    onDragStart={(e) => onPaletteDragStart(e, item)}
+                    onDragEnd={onPaletteDragEnd}
                     onClick={() => onAdd(item)}
                     className="inline-flex w-fit shrink-0 cursor-grab items-baseline gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-left active:cursor-grabbing hover:border-teal-400 hover:bg-teal-50"
                   >
