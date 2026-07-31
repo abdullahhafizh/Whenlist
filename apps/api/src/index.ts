@@ -57,15 +57,16 @@ type ItemRow = {
 const app = new Hono<{ Bindings: Env }>();
 
 app.use("*", async (c, next) => {
-  const origins = (c.env.ALLOWED_ORIGINS || "")
+  const origins = (c.env.ALLOWED_ORIGINS || "*")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const corsMiddleware = cors({
     origin: (origin) => {
+      if (origins.includes("*")) return origin || "*";
       if (!origin) return origins[0] ?? "*";
-      if (origins.includes("*") || origins.includes(origin)) return origin;
-      return origins[0] ?? "";
+      if (origins.includes(origin)) return origin;
+      return "";
     },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type"],

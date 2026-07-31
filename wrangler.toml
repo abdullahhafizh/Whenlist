@@ -14,4 +14,5 @@ migrations_dir = "apps/api/migrations"
 
 [vars]
 APP_TIMEZONE = "Asia/Jakarta"
-ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+# * = reflect any browser Origin (hobby deploy; Vercel preview/prod just work)
+ALLOWED_ORIGINS = "*"

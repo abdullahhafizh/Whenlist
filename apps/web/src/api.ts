@@ -1,7 +1,11 @@
-const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(
-  /\/$/,
-  "",
-) ?? "";
+const DEFAULT_API_DEV = "http://127.0.0.1:8787";
+/** Production Worker — used when VITE_API_BASE_URL is unset at build time. */
+const DEFAULT_API_PROD = "https://whenlist.abdllhhafizh.workers.dev";
+
+const BASE = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ||
+  (import.meta.env.PROD ? DEFAULT_API_PROD : DEFAULT_API_DEV)
+).replace(/\/$/, "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

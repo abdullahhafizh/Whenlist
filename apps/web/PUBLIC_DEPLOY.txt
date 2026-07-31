@@ -1,46 +1,13 @@
-# Cloudflare Pages / Workers Builds (Git-connected)
+# Zero-config Git deploys (connect repo → deploy)
 #
-# This repo is pnpm-only (`packageManager` in root package.json).
-# Do NOT leave a bun.lock in the repo — Cloudflare will run
-# `bun install --frozen-lockfile` and fail.
+# Cloudflare Workers (API)
+#   - Connect GitHub to Workers Builds at repo root
+#   - Install / Deploy defaults: pnpm + `npx wrangler deploy`
+#   - Uses root wrangler.toml (Worker name "whenlist", D1 checklist-db)
 #
-# ---------------------------------------------------------------------------
-# Workers (API) — Git integration
-# ---------------------------------------------------------------------------
-# Root directory:     /  (repository root)
-# Install command:    pnpm install --frozen-lockfile
-# Build command:      (optional) pnpm --filter @whenlist/api build
-#                     Avoid `pnpm run build` here if you only deploy the Worker —
-#                     that also builds the web app.
-# Deploy command:     npx wrangler deploy
-#                     (root has wrangler + wrangler.toml → apps/api entry)
-#   also OK:          pnpm deploy:api
+# Vercel (web UI)
+#   - Connect the SAME GitHub repo (any Root Directory: /, apps/web, or apps/api)
+#   - vercel.json always builds @whenlist/web
+#   - API URL defaults to production Worker if VITE_API_BASE_URL unset
 #
-# Put the real D1 database_id in BOTH:
-#   wrangler.toml  AND  apps/api/wrangler.toml
-# ---------------------------------------------------------------------------
-# Pages (web UI)
-# ---------------------------------------------------------------------------
-# Recommended dashboard settings (root directory = repository root):
-#   Framework preset: Vite (or None)
-#   Build command:    pnpm --filter @whenlist/web build
-#   Build output:     apps/web/dist
-#   Install command:  pnpm install --frozen-lockfile
-#   Node version:     22 (or set environment variable NODE_VERSION=22)
-#
-# If Root directory is set to `apps/web` instead:
-#   Install command:  cd ../.. && pnpm install --frozen-lockfile
-#   Build command:    cd ../.. && pnpm --filter @whenlist/web build
-#   Build output:     dist
-#
-# ---------------------------------------------------------------------------
-# Vercel (UI only) — Git integration
-# ---------------------------------------------------------------------------
-# Project name:       whenlist (or whenlist-web) — NOT whenlist-api
-# Root Directory:     apps/web   ← MUST be web, NOT apps/api / NOT repo root
-# Install / build:    from apps/web/vercel.json (pnpm monorepo)
-# Env:                VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev
-#
-# If you already created a Vercel project pointed at apps/api (500s like
-# ERR_MODULE_NOT_FOUND … @whenlist/dsl/src/index.ts): delete it or change
-# Root Directory to apps/web. API stays on Cloudflare Workers + D1 only.
+# Local web still uses http://127.0.0.1:8787 unless apps/web/.env overrides.

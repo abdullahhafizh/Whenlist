@@ -111,13 +111,9 @@ Grammar / AST: see comments in [`packages/dsl/src/ast.ts`](packages/dsl/src/ast.
 
 ### B — Vercel (UI only)
 
-1. Import the **same** GitHub repo as a **new** Vercel project (name it e.g. `whenlist`, not `whenlist-api`)
-2. **Root Directory:** `apps/web` (required — never `apps/api`)
-3. Env: `VITE_API_BASE_URL` = your **Cloudflare Workers** URL (`https://whenlist-api.<account>.workers.dev`)
-4. Build uses [`apps/web/vercel.json`](apps/web/vercel.json) (`pnpm --filter @whenlist/web build` → `dist`)
-5. Ensure Workers `ALLOWED_ORIGINS` includes the Vercel domain, then redeploy the Worker
+Connect the **same** GitHub repo. No Root Directory tweaking required: `vercel.json` at repo root (and under `apps/web` / `apps/api`) always builds the web UI. Production API URL defaults to the Worker when `VITE_API_BASE_URL` is unset.
 
-Do **not** deploy `apps/api` to Vercel. It needs D1 + Workers bindings; a Vercel serverless Node runtime will 500 (e.g. missing `@whenlist/dsl` `.ts` source). Delete or abandon any Vercel project whose root is `apps/api` (e.g. `whenlist-api-*`).
+Do **not** expect D1/Workers to run on Vercel — only the static UI.
 
 ## API surface
 
