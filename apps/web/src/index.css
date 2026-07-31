@@ -707,6 +707,16 @@
   pointer-events: none;
 }
 
+/* Later / snooze: same motion as archive swipe, but exits to the right (no underlay). */
+.checklist-row.is-swipe-out-right {
+  animation: checklist-swipe-out-right 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+.checklist-row.is-swipe-out-right .checklist-swipe__bg {
+  display: none !important;
+}
+
 .checklist-row.is-undo-in {
   animation: checklist-undo-in 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -732,6 +742,26 @@
     margin: 0;
     padding: 0;
     transform: translateX(-120%);
+  }
+}
+
+@keyframes checklist-swipe-out-right {
+  0% {
+    opacity: 1;
+    max-height: 12rem;
+    transform: translateX(0);
+  }
+  55% {
+    opacity: 1;
+    max-height: 12rem;
+    transform: translateX(110%);
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    transform: translateX(120%);
   }
 }
 
@@ -1011,6 +1041,7 @@
   .checklist-label.is-animating,
   .checklist-remove-progress,
   .checklist-row.is-swipe-out,
+  .checklist-row.is-swipe-out-right,
   .checklist-row.is-undo-in,
   .checklist-row.is-falling-in,
   .checklist-row.is-falling-ghost,

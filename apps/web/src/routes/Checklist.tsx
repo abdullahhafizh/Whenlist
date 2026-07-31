@@ -80,6 +80,7 @@ export default function Checklist() {
   const [progressIds, setProgressIds] = useState<Set<string>>(() => new Set());
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const [swipeOutIds, setSwipeOutIds] = useState<Set<string>>(() => new Set());
+  const [snoozeOutIds, setSnoozeOutIds] = useState<Set<string>>(() => new Set());
   const [undoFlashIds, setUndoFlashIds] = useState<Set<string>>(() => new Set());
   const [undoInIds, setUndoInIds] = useState<Set<string>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<{
@@ -563,19 +564,34 @@ export default function Checklist() {
     );
   };
 
-  const snoozeItem = async (item: ChecklistItemView) => {
-    setBusyId(item.id);
+  const snoozeItem = (item: ChecklistItemView) => {
+    if (exitingRef.current.has(item.id)) return;
+    if (snoozeOutIds.has(item.id) || swipeOutIds.has(item.id)) return;
     cancelPendingRemove(item.id);
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-    try {
-      await api.snooze(item.id);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
+    setBusyId(item.id);
+    setSnoozeOutIds((prev) => new Set(prev).add(item.id));
+    clearItemTimers(`snooze-out-${item.id}`);
+    timersRef.current.set(
+      `snooze-out-${item.id}`,
+      setTimeout(() => {
+        setSnoozeOutIds((prev) => {
+          const n = new Set(prev);
+          n.delete(item.id);
+          return n;
+        });
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        void (async () => {
+          try {
+            await api.snooze(item.id);
+          } catch (e) {
+            setError((e as Error).message);
+            await load();
+          } finally {
+            setBusyId((cur) => (cur === item.id ? null : cur));
+          }
+        })();
+      }, SWIPE_OUT_MS),
+    );
   };
 
   if (loading) {
@@ -686,15 +702,22 @@ export default function Checklist() {
             const pressing = pressingId === item.id;
             const animatingCheck = animatingCheckIds.has(item.id);
             const swipeOut = swipeOutIds.has(item.id);
+            const snoozeOut = snoozeOutIds.has(item.id);
             const undoIn = undoInIds.has(item.id);
             const undoFlash = undoFlashIds.has(item.id);
-            const canToggle = !exiting && !swipeOut && (busyId === null || busyId === item.id);
+            const canToggle =
+              !exiting &&
+              !swipeOut &&
+              !snoozeOut &&
+              (busyId === null || busyId === item.id);
             return (
               <li
                 key={item.id}
                 className={`checklist-row relative w-full min-w-0 ${
                   exiting ? "is-exiting" : ""
                 } ${swipeOut ? "is-swipe-out" : ""} ${
+                  snoozeOut ? "is-swipe-out-right" : ""
+                } ${
                   undoIn ? "is-undo-in" : ""
                 } ${
                   fallPhase !== "off" && index < PAGE_SIZE
@@ -717,12 +740,12 @@ export default function Checklist() {
               >
                 <Holdable
                   className="block w-full min-w-0"
-                  disabled={exiting || swipeOut || pendingRemove}
+                  disabled={exiting || swipeOut || snoozeOut || pendingRemove}
                   onHold={() => setHoldMenuItem(item)}
                 >
                   <SwipeToDelete
                     className="w-full min-w-0"
-                    disabled={exiting || swipeOut || pendingRemove}
+                    disabled={exiting || swipeOut || snoozeOut || pendingRemove}
                     onSwipeDelete={() => swipeDeleteItem(item)}
                   >
                     <div
@@ -810,9 +833,9 @@ export default function Checklist() {
                         !pendingRemove && (
                           <button
                             type="button"
-                            disabled={busyId !== null}
+                            disabled={busyId !== null || snoozeOut || swipeOut}
                             title="Hide for now — comes back next time it should show"
-                            onClick={() => void snoozeItem(item)}
+                            onClick={() => snoozeItem(item)}
                             className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 active:scale-95 sm:px-2.5 sm:py-1.5 sm:text-xs"
                           >
                             Later
