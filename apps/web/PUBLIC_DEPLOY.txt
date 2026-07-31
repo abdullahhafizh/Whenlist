@@ -31,7 +31,11 @@
 #   Build command:    cd ../.. && pnpm --filter @whenlist/web build
 #   Build output:     dist
 #
-# Required env at build time:
-#   VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev
+# ---------------------------------------------------------------------------
+# Vercel (UI only) — Git integration
+# ---------------------------------------------------------------------------
+# Root Directory:     apps/web   ← MUST be web, NOT apps/api
+# Install / build:    from apps/web/vercel.json (pnpm monorepo)
+# Env:                VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev
 #
-# SPA: enable “Not found handling” / rewrite all routes to /index.html
+# Do not point Vercel at apps/api — API is Cloudflare Workers + D1.

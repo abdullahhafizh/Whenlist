@@ -270,7 +270,7 @@ async function validateUpsert(
     knownIds,
     existingDeps,
   });
-  if (!parsed.ok) {
+  if (parsed.ok === false) {
     return {
       ok: false,
       status: 400,
@@ -290,7 +290,9 @@ async function validateUpsert(
 app.post("/api/items", async (c) => {
   const body = (await c.req.json()) as UpsertBody;
   const v = await validateUpsert(c.env.DB, body);
-  if (!v.ok) return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  if (v.ok === false) {
+    return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  }
 
   const mode = body.completionMode ?? "while_valid";
   let sortOrder = body.sortOrder;
@@ -346,7 +348,9 @@ app.post("/api/items/:id/clone", async (c) => {
       allowRemind: existing.allow_remind === 1,
     },
   );
-  if (!v.ok) return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  if (v.ok === false) {
+    return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  }
 
   const max = await c.env.DB.prepare(
     "SELECT COALESCE(MAX(sort_order), 0) AS m FROM checklist_items",
@@ -397,7 +401,9 @@ app.put("/api/items/:id", async (c) => {
     { ...body, completionMode: mode },
     id,
   );
-  if (!v.ok) return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  if (v.ok === false) {
+    return c.json({ error: v.error, issues: v.issues }, v.status as 400);
+  }
 
   const sortOrder = body.sortOrder ?? existing.sort_order;
   const isActive =
@@ -542,7 +548,7 @@ app.post("/api/formula/validate", async (c) => {
     knownIds,
     existingDeps,
   });
-  if (!result.ok) {
+  if (result.ok === false) {
     return c.json({
       ok: false,
       error: result.error,
@@ -628,7 +634,7 @@ app.post("/api/nl/parse", async (c) => {
       knownIds,
       existingDeps,
     });
-    if (!validated.ok) {
+    if (validated.ok === false) {
       return c.json(
         {
           error: validated.error,
