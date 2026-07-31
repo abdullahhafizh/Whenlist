@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { flushSync } from "react-dom";
 import { Link } from "react-router-dom";
 import { api, type ChecklistItemView, type ReminderAlert } from "../api";
 import { banner, btn, pageTitle } from "../ui/styles";
@@ -22,6 +23,8 @@ const CHECK_ANIM_MS = 720;
 const SWIPE_OUT_MS = 320;
 const UNDO_WINDOW_MS = 5000;
 const UNDO_FLASH_MS = 900;
+/** Undo toast slide-out (mirrors checklist-undo-in-bar). */
+const UNDO_OUT_MS = 280;
 /** First paint + each “load more” chunk — keep small for instant feel. */
 const PAGE_SIZE = 10;
 /** Empty stack shells from always-visible count (aesthetic); real rows stay PAGE_SIZE. */
@@ -32,8 +35,8 @@ const DROP_SLOT_CAP = 60;
  * Index 0 never drops — it only stands. `--fall-from-y` is measured so the
  * pile sits exactly on that stand seat (not above it).
  *
- * Same cubic cascade as before for ≥10 cards. Below that, the 1100ms span
- * scales by (n-1)/9 so few cards don't inherit a "thousand-card" wait.
+ * ≥10 cards: delay span 1100ms · duration 380–900ms (cubic). Unchanged.
+ * <10 cards: same curve × (n/10)² so fewer cards peel much faster.
  */
 function fallDropStyle(
   index: number,
@@ -48,8 +51,7 @@ function fallDropStyle(
   const movers = Math.max(1, n - 1);
   const moverI = i - 1;
   const t = movers <= 1 ? 0 : (movers - 1 - moverI) / (movers - 1);
-  // Full drama at 10+ cards; proportional span for smaller piles.
-  const scale = Math.min(1, (n - 1) / 9);
+  const scale = n >= 10 ? 1 : (n / 10) ** 2;
   const delayMs = Math.round(1100 * scale * t ** 3.1);
   const durMs = Math.round(380 + 520 * scale * t ** 2.2);
 
@@ -100,6 +102,7 @@ export default function Checklist() {
     item: ChecklistItemView;
     index: number;
   } | null>(null);
+  const [undoLeaving, setUndoLeaving] = useState(false);
   const [holdMenuItem, setHoldMenuItem] = useState<ChecklistItemView | null>(
     null,
   );
@@ -108,6 +111,10 @@ export default function Checklist() {
   const pendingRemoveRef = useRef<Set<string>>(new Set());
   const exitingRef = useRef<Set<string>>(new Set());
   const pendingDeleteIdRef = useRef<string | null>(null);
+  const pendingDeleteRef = useRef(pendingDelete);
+  const undoLeavingRef = useRef(undoLeaving);
+  pendingDeleteRef.current = pendingDelete;
+  undoLeavingRef.current = undoLeaving;
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -521,10 +528,31 @@ export default function Checklist() {
     }
   };
 
-  const commitPendingDelete = async (item: ChecklistItemView) => {
+  const commitPendingDelete = async (
+    item: ChecklistItemView,
+    opts?: { instant?: boolean },
+  ) => {
     clearItemTimers(`delete-${item.id}`);
+    clearItemTimers("undo-bar-out");
     pendingDeleteIdRef.current = null;
+
+    const showing =
+      !opts?.instant &&
+      pendingDeleteRef.current?.item.id === item.id &&
+      !undoLeavingRef.current;
+
+    if (showing) {
+      flushSync(() => setUndoLeaving(true));
+      await new Promise<void>((resolve) => {
+        timersRef.current.set(
+          "undo-bar-out",
+          setTimeout(() => resolve(), UNDO_OUT_MS),
+        );
+      });
+    }
+
     setPendingDelete((cur) => (cur?.item.id === item.id ? null : cur));
+    setUndoLeaving(false);
     try {
       await api.deleteItem(item.id);
       await load();
@@ -539,11 +567,11 @@ export default function Checklist() {
   };
 
   const undoPendingDelete = () => {
-    const pending = pendingDelete;
-    if (!pending) return;
+    const pending = pendingDeleteRef.current;
+    if (!pending || undoLeavingRef.current) return;
     clearItemTimers(`delete-${pending.item.id}`);
+    clearItemTimers("undo-bar-out");
     pendingDeleteIdRef.current = null;
-    setPendingDelete(null);
 
     setItems((prev) => {
       if (prev.some((i) => i.id === pending.item.id)) return prev;
@@ -576,6 +604,16 @@ export default function Checklist() {
         });
       }, UNDO_FLASH_MS),
     );
+
+    flushSync(() => setUndoLeaving(true));
+    timersRef.current.set(
+      "undo-bar-out",
+      setTimeout(() => {
+        setPendingDelete(null);
+        setUndoLeaving(false);
+        timersRef.current.delete("undo-bar-out");
+      }, UNDO_OUT_MS),
+    );
   };
 
   const swipeDeleteItem = (item: ChecklistItemView) => {
@@ -584,7 +622,7 @@ export default function Checklist() {
 
     // Commit any previous pending delete first
     if (pendingDelete && pendingDelete.item.id !== item.id) {
-      void commitPendingDelete(pendingDelete.item);
+      void commitPendingDelete(pendingDelete.item, { instant: true });
     }
 
     const index = items.findIndex((i) => i.id === item.id);
@@ -600,6 +638,7 @@ export default function Checklist() {
         });
         setItems((prev) => prev.filter((i) => i.id !== item.id));
         pendingDeleteIdRef.current = item.id;
+        setUndoLeaving(false);
         setPendingDelete({ item, index: Math.max(0, index) });
         clearItemTimers(`delete-${item.id}`);
         timersRef.current.set(
@@ -981,7 +1020,7 @@ export default function Checklist() {
                             disabled={busyId !== null || snoozeOut || swipeOut}
                             title="Hide for now — comes back next time it should show"
                             onClick={() => snoozeItem(item)}
-                            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 active:scale-95 sm:px-2.5 sm:py-1.5 sm:text-xs"
+                            className="hidden rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 active:scale-95 sm:inline-flex"
                           >
                             Later
                           </button>
@@ -1174,6 +1213,27 @@ export default function Checklist() {
                 </span>
                 Share
               </button>
+              {(holdMenuItem.canSnooze ??
+                holdMenuItem.completionMode === "once") &&
+                !holdMenuItem.checked && (
+                  <button
+                    type="button"
+                    className="sm:hidden"
+                    onClick={() => {
+                      const target = holdMenuItem;
+                      setHoldMenuItem(null);
+                      snoozeItem(target);
+                    }}
+                  >
+                    <span
+                      className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600"
+                      aria-hidden
+                    >
+                      ▸
+                    </span>
+                    Later
+                  </button>
+                )}
               <button
                 type="button"
                 className="is-danger"
@@ -1206,7 +1266,7 @@ export default function Checklist() {
       {pendingDelete && (
         <div
           key={pendingDelete.item.id}
-          className="checklist-undo"
+          className={`checklist-undo${undoLeaving ? " is-leaving" : ""}`}
           role="status"
           aria-live="polite"
         >
