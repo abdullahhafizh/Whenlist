@@ -1,7 +1,5 @@
-# Local convenience: same Worker as root wrangler.toml.
-# Prefer running via package scripts (they pass --config ../../wrangler.toml).
-# Kept so `cd apps/api && wrangler …` without flags still works.
-name = "whenlist-api"
+# Keep in sync with root wrangler.toml (same name + database_id).
+name = "whenlist"
 main = "src/index.ts"
 compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
@@ -9,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "checklist-db"
+# Replace with the UUID from: npx wrangler d1 create checklist-db
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 

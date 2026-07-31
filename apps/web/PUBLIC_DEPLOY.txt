@@ -36,8 +36,11 @@
 # ---------------------------------------------------------------------------
 # Vercel (UI only) — Git integration
 # ---------------------------------------------------------------------------
-# Root Directory:     apps/web   ← MUST be web, NOT apps/api
+# Project name:       whenlist (or whenlist-web) — NOT whenlist-api
+# Root Directory:     apps/web   ← MUST be web, NOT apps/api / NOT repo root
 # Install / build:    from apps/web/vercel.json (pnpm monorepo)
 # Env:                VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev
 #
-# Do not point Vercel at apps/api — API is Cloudflare Workers + D1.
+# If you already created a Vercel project pointed at apps/api (500s like
+# ERR_MODULE_NOT_FOUND … @whenlist/dsl/src/index.ts): delete it or change
+# Root Directory to apps/web. API stays on Cloudflare Workers + D1 only.

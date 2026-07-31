@@ -105,16 +105,19 @@ Grammar / AST: see comments in [`packages/dsl/src/ast.ts`](packages/dsl/src/ast.
 
 **Workers Builds:** install `pnpm install --frozen-lockfile`. Deploy may stay as `npx wrangler deploy` (root now includes `wrangler` + [`wrangler.toml`](wrangler.toml)). Put the real D1 `database_id` in **both** root and `apps/api/wrangler.toml`. See [`apps/web/PUBLIC_DEPLOY.txt`](apps/web/PUBLIC_DEPLOY.txt).
 
-> **Rebrand note:** The Worker is named `whenlist-api`. If you previously deployed as `checklist-api`, update `VITE_API_BASE_URL` to the new Workers URL after deploy, then remove the old Worker from the Cloudflare dashboard once verified.
+> **Worker name:** Cloudflare Workers Builds project is `whenlist` — both [`wrangler.toml`](wrangler.toml) and [`apps/api/wrangler.toml`](apps/api/wrangler.toml) use `name = "whenlist"`.
+
+> **Rebrand note:** Older docs / URLs may say `whenlist-api.<account>.workers.dev`. After first successful deploy, use the URL Cloudflare shows (often `whenlist.<account>.workers.dev`) for `VITE_API_BASE_URL`.
 
 ### B — Vercel (UI only)
 
-1. Import repo / set root to `apps/web` (or monorepo filter)
-2. Env: `VITE_API_BASE_URL` = your Workers URL
-3. Build: `pnpm --filter @whenlist/web build` (output `apps/web/dist`)
-4. Ensure Workers `ALLOWED_ORIGINS` includes the Vercel domain
+1. Import the **same** GitHub repo as a **new** Vercel project (name it e.g. `whenlist`, not `whenlist-api`)
+2. **Root Directory:** `apps/web` (required — never `apps/api`)
+3. Env: `VITE_API_BASE_URL` = your **Cloudflare Workers** URL (`https://whenlist-api.<account>.workers.dev`)
+4. Build uses [`apps/web/vercel.json`](apps/web/vercel.json) (`pnpm --filter @whenlist/web build` → `dist`)
+5. Ensure Workers `ALLOWED_ORIGINS` includes the Vercel domain, then redeploy the Worker
 
-Do **not** run D1 or Workers on Vercel.
+Do **not** deploy `apps/api` to Vercel. It needs D1 + Workers bindings; a Vercel serverless Node runtime will 500 (e.g. missing `@whenlist/dsl` `.ts` source). Delete or abandon any Vercel project whose root is `apps/api` (e.g. `whenlist-api-*`).
 
 ## API surface
 

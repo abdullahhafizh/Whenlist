@@ -1,6 +1,7 @@
 # Used by Cloudflare Workers Builds (`npx wrangler deploy` from repo root)
-# and by `pnpm --filter @whenlist/api` scripts via --config.
-name = "whenlist-api"
+# and by local `pnpm --filter @whenlist/api` (apps/api/wrangler.toml).
+# Worker name must match the Cloudflare Workers Builds project ("whenlist").
+name = "whenlist"
 main = "apps/api/src/index.ts"
 compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
@@ -8,6 +9,8 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "checklist-db"
+# Replace with the UUID from: cd apps/api && npx wrangler d1 create checklist-db
+# Keep the same value in apps/api/wrangler.toml
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "apps/api/migrations"
 

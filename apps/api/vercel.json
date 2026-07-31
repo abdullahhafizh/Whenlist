@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "node -e \"console.error('\\nERROR: @whenlist/api cannot run on Vercel.\\nDeploy the API with Cloudflare Workers + D1 (pnpm deploy:api).\\nFor the UI, create a Vercel project with Root Directory = apps/web.\\n'); process.exit(1)\""
+}
