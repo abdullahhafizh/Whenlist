@@ -1,0 +1,29 @@
+---
+description: Whenlist DSL must stay complete in Ask NL rules and docs — never omit supported features
+globs: packages/dsl/**/*,apps/api/src/nlParse.ts,apps/api/src/dslNlRules.ts,apps/web/src/routes/CreateFromQuery.tsx
+alwaysApply: false
+---
+
+# Whenlist DSL completeness
+
+Authoritative grammar: `packages/dsl/src/ast.ts` (BNF header) + evaluator/parser/tests.
+
+Ask / NL → DSL system prompt lives in [`apps/api/src/dslNlRules.ts`](apps/api/src/dslNlRules.ts) (`WHENLIST_DSL_NL_RULES`). Used by Gemini on `POST /api/nl/parse`.
+
+## Hard rule
+
+If a feature **parses and evaluates** in `@whenlist/dsl`, it **must** appear in `WHENLIST_DSL_NL_RULES` with syntax + example. Do not leave supported surface undocumented in the Ask ruleset.
+
+## Supported surface checklist (keep in sync)
+
+- Fields: date, month, year, hour, weekday, meridiem, dateMonth, monthYear, dateMonthYear, lastDay, monthLength
+- Compare: == != >= <= > < with value_expr RHS
+- between (cyclic wrap vs linear), in [literals]
+- Logic: && || ! ()
+- weekend, checked / notChecked / checked("id") / notChecked("id")
+- Value exprs: + - * /, unary, ceil floor round abs min max, numeric refs
+- let / fn / program
+- Empty formula → always true, only with completionMode once
+- allowRemind false for once + empty formula
+
+When adding DSL features: update `ast.ts` BNF, tests, **and** `dslNlRules.ts` in the same change.

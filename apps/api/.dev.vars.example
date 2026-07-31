@@ -1,0 +1,5 @@
+# Local Wrangler secrets / vars (copy to apps/api/.dev.vars — gitignored)
+# Get a key from https://aistudio.google.com/apikey (Gemini free tier)
+GEMINI_API_KEY=
+# Optional override (default: gemini-2.0-flash)
+# GEMINI_MODEL=gemini-2.0-flash

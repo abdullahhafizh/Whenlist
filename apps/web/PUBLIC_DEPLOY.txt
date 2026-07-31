@@ -1,0 +1,7 @@
+# Cloudflare Pages (when deploying from monorepo root / apps/web)
+# Build command: pnpm --filter @whenlist/web build
+# Build output: apps/web/dist
+# Root directory: apps/web (or monorepo with filter)
+#
+# Required env at build time:
+#   VITE_API_BASE_URL=https://your-worker.workers.dev

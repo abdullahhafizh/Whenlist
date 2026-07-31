@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && pnpm --filter @whenlist/web build",
+  "outputDirectory": "dist",
+  "installCommand": "cd ../.. && pnpm install",
+  "framework": "vite"
+}

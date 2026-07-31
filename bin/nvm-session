@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# nvm use --lts for this Overmind session, then stay alive so siblings are not killed.
+set -eo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+export TMPDIR="${TMPDIR:-/tmp}"
+# shellcheck disable=SC1091
+. "$NVM_DIR/nvm.sh"
+cd "$ROOT"
+
+echo "nvm use --lts (also honors .nvmrc = lts/*)…"
+if ! nvm use 2>/dev/null; then
+  echo "Installing Node LTS…"
+  nvm install --lts
+fi
+nvm use --lts
+
+echo "nvm session ready: $(node -v) (npm $(npm -v))"
+echo "Keeping this process alive for the Overmind session…"
+exec tail -f /dev/null

@@ -1,0 +1,1 @@
+ALTER TABLE checklist_items ADD COLUMN allow_remind INTEGER NOT NULL DEFAULT 0;

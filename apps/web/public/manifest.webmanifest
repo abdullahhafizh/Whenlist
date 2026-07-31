@@ -1,0 +1,32 @@
+{
+  "name": "Whenlist",
+  "short_name": "Whenlist",
+  "description": "The checklist that knows when.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Create from text",
+      "short_name": "Create",
+      "description": "Turn natural language into a checklist item",
+      "url": "/create",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

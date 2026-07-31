@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Run a command with Node from .nvmrc / LTS (avoids login shells / sdkman).
+# Waits briefly for the Procfile `nvm` process to finish installing LTS if needed.
+set -eo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+export TMPDIR="${TMPDIR:-/tmp}"
+# shellcheck disable=SC1091
+. "$NVM_DIR/nvm.sh"
+cd "$ROOT"
+
+activate() {
+  # Prefer current Node LTS; fall back to .nvmrc if --lts is unavailable.
+  nvm use --lts >/dev/null 2>&1 || nvm use >/dev/null 2>&1
+}
+
+if ! activate; then
+  echo "Waiting for nvm LTS (Procfile process 'nvm')…"
+  for _ in $(seq 1 90); do
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh"
+    if activate; then
+      break
+    fi
+    sleep 1
+  done
+fi
+
+if ! activate; then
+  echo "No Node LTS available. Check the 'nvm' process logs, or run: nvm install --lts" >&2
+  exit 1
+fi
+
+echo "using $(node -v)"
+exec "$@"

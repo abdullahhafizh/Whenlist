@@ -1,0 +1,25 @@
+{
+  "name": "whenlist",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @whenlist/api --filter @whenlist/web dev",
+    "dev:api": "pnpm --filter @whenlist/api dev",
+    "dev:web": "pnpm --filter @whenlist/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}

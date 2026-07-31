@@ -1,0 +1,23 @@
+{
+  "name": "@whenlist/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply checklist-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply checklist-db --remote",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no api unit tests'"
+  },
+  "dependencies": {
+    "@whenlist/dsl": "workspace:*",
+    "hono": "^4.7.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260730.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.115.0"
+  }
+}
