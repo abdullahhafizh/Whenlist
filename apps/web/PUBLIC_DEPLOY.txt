@@ -1,7 +1,22 @@
-# Cloudflare Pages (when deploying from monorepo root / apps/web)
-# Build command: pnpm --filter @whenlist/web build
-# Build output: apps/web/dist
-# Root directory: apps/web (or monorepo with filter)
+# Cloudflare Pages / Workers Builds (Git-connected)
+#
+# This repo is pnpm-only (`packageManager` in root package.json).
+# Do NOT leave a bun.lock in the repo — Cloudflare will run
+# `bun install --frozen-lockfile` and fail.
+#
+# Recommended dashboard settings (root directory = repository root):
+#   Framework preset: Vite (or None)
+#   Build command:    pnpm --filter @whenlist/web build
+#   Build output:     apps/web/dist
+#   Install command:  pnpm install --frozen-lockfile
+#   Node version:     22 (or set environment variable NODE_VERSION=22)
+#
+# If Root directory is set to `apps/web` instead:
+#   Install command:  cd ../.. && pnpm install --frozen-lockfile
+#   Build command:    cd ../.. && pnpm --filter @whenlist/web build
+#   Build output:     dist
 #
 # Required env at build time:
-#   VITE_API_BASE_URL=https://your-worker.workers.dev
+#   VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev
+#
+# SPA: enable “Not found handling” / rewrite all routes to /index.html

@@ -13,3 +13,8 @@ coverage/
 *.tsbuildinfo
 .vercel/
 .pnpm-store/
+# This monorepo uses pnpm only — bun.lock makes Cloudflare pick bun install.
+bun.lock
+bun.lockb
+**/bun.lock
+**/bun.lockb

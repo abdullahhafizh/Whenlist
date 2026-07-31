@@ -101,6 +101,8 @@ Grammar / AST: see comments in [`packages/dsl/src/ast.ts`](packages/dsl/src/ast.
    `VITE_API_BASE_URL=https://whenlist-api.<account>.workers.dev pnpm --filter @whenlist/web build`
 9. Deploy `apps/web/dist` to Cloudflare Pages
 
+**Git-connected Pages / Workers Builds:** this monorepo is **pnpm-only**. Set install to `pnpm install --frozen-lockfile` (see [`apps/web/PUBLIC_DEPLOY.txt`](apps/web/PUBLIC_DEPLOY.txt)). A present `bun.lock` makes Cloudflare run Bun and fail frozen installs.
+
 > **Rebrand note:** The Worker is named `whenlist-api`. If you previously deployed as `checklist-api`, update `VITE_API_BASE_URL` to the new Workers URL after deploy, then remove the old Worker from the Cloudflare dashboard once verified.
 
 ### B — Vercel (UI only)
