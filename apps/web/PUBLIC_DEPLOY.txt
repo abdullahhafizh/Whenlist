@@ -4,6 +4,21 @@
 # Do NOT leave a bun.lock in the repo — Cloudflare will run
 # `bun install --frozen-lockfile` and fail.
 #
+# ---------------------------------------------------------------------------
+# Workers (API) — Git integration
+# ---------------------------------------------------------------------------
+# Root directory:     /  (repository root)
+# Install command:    pnpm install --frozen-lockfile
+# Deploy command:     pnpm deploy:api
+#   (or: pnpm --filter @whenlist/api deploy)
+# DO NOT use:         npx wrangler deploy
+#   wrangler lives in apps/api — npx from repo root cannot find it.
+# Config path:        apps/api/wrangler.toml (used automatically by the
+#                     package deploy script, which runs in apps/api)
+#
+# ---------------------------------------------------------------------------
+# Pages (web UI)
+# ---------------------------------------------------------------------------
 # Recommended dashboard settings (root directory = repository root):
 #   Framework preset: Vite (or None)
 #   Build command:    pnpm --filter @whenlist/web build
