@@ -1,0 +1,55 @@
+---
+description: Plain-language UI copy for Whenlist — never expose DSL jargon to end users
+globs: apps/web/**/*.{tsx,ts,css},docs/**
+alwaysApply: false
+---
+
+# Whenlist UI copy (humans first)
+
+End users of Checklist / Create / Help **do not know DSL**. Keep copy in **English** (product language) unless the user explicitly asks to localize.
+
+Canonical glossary + examples: [`docs/user-guide.md`](docs/user-guide.md).
+
+## Hard rules
+
+1. **Do not change the product language** (English) unless asked. Plain language ≠ Indonesian.
+2. **Never** put these words in Checklist or Create UI: `formula`, `DSL`, `AST`, `while_valid`, `completionMode`, `evaluates`, `parse`, `serialize`, `window_start`, `checked_at`.
+3. Badges and subtitles explain **behavior**, not engine mode.
+4. If you must show technical text (Builder advanced mode), label it **Advanced** and keep a plain summary nearby.
+5. AI explanations on Create must be everyday English (what shows when / how often) — not dump raw DSL.
+
+## Glossary (internal → UI)
+
+| Internal | UI label | What to tell the user |
+|----------|----------|------------------------|
+| `formula` | When / Schedule | “When this item should show up” |
+| `completionMode: once` | One-time | “Shows until you finish it — then it’s done” |
+| `completionMode: while_valid` | Repeats | “Shows again whenever the schedule matches” |
+| empty once formula | Until done | “Always on the list until you check it off” |
+| `allowRemind` | Remind me early | “Ping before it becomes due” |
+| Snooze | Later | “Hide for now; comes back next time it should show” |
+| Archive / soft-delete | Archive | “Remove from the list — restore in Builder” |
+| Text DSL toggle | Advanced text | Only in Builder |
+| TRUE / FALSE preview | Showing now / Hidden now | Live preview outcome |
+
+## Examples
+
+```tsx
+// ❌ BAD
+"Items appear when their formula evaluates to true."
+
+// ✅ GOOD
+"Nothing due right now. Items show up when their schedule matches."
+```
+
+```tsx
+// ❌ BAD
+"Always visible (completion mode once)" / "Parse with AI" / "Formula"
+
+// ✅ GOOD
+"One-time — stays until I check it off" / "Make checklist item" / "When it shows"
+```
+
+## Docs
+
+When adding a user-visible feature, update `docs/user-guide.md` with a short what/when/example section in the same change.

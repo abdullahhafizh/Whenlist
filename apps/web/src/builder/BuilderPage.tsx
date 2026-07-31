@@ -28,6 +28,9 @@ import {
 } from "../builder/useResizableColumns";
 import { useAstHistory } from "../builder/useAstHistory";
 import { btn, field, banner, pageTitle, sectionTitle } from "../ui/styles";
+import PageLoader from "../ui/PageLoader";
+
+const PAGE_SIZE = 10;
 
 type EditorBaseline = {
   label: string;
@@ -68,6 +71,20 @@ export default function Builder() {
   const { widths, startResize, reset: resetWidths } = useResizableColumns();
 
   const [items, setItems] = useState<ItemRecord[]>([]);
+  const [archived, setArchived] = useState<ItemRecord[]>([]);
+  const [allIds, setAllIds] = useState<string[]>([]);
+  const [depsById, setDepsById] = useState<Record<string, string[]>>({});
+  const [hasMoreItems, setHasMoreItems] = useState(false);
+  const [hasMoreArchived, setHasMoreArchived] = useState(false);
+  const [loadingMoreItems, setLoadingMoreItems] = useState(false);
+  const [loadingMoreArchived, setLoadingMoreArchived] = useState(false);
+  const nextItemsOffsetRef = useRef(0);
+  const nextArchivedOffsetRef = useRef(0);
+  const hasMoreItemsRef = useRef(false);
+  const hasMoreArchivedRef = useRef(false);
+  const loadingMoreItemsRef = useRef(false);
+  const loadingMoreArchivedRef = useRef(false);
+  const itemsListRef = useRef<HTMLUListElement | null>(null);
   const [label, setLabel] = useState("");
   const [completionMode, setCompletionMode] = useState<"once" | "while_valid">(
     "while_valid",
@@ -84,9 +101,13 @@ export default function Builder() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<ItemRecord | null>(null);
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<EditorBaseline>(EMPTY_BASELINE);
   const [discardOpen, setDiscardOpen] = useState(false);
   const pendingAfterDiscard = useRef<(() => void) | null>(null);
@@ -95,7 +116,10 @@ export default function Builder() {
   const [showCompletedOnce, setShowCompletedOnce] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
-  const knownIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
+  const knownIds = useMemo(
+    () => new Set(allIds.length > 0 ? allIds : items.map((i) => i.id)),
+    [allIds, items],
+  );
 
   const formulaText = useMemo(() => (ast ? serialize(ast) : ""), [ast]);
 
@@ -152,59 +176,193 @@ export default function Builder() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isDirty]);
 
-  const load = useCallback(async () => {
-    const { items: list } = await api.listItems();
-    setItems(list);
-    if (editId) {
-      const found = list.find((i) => i.id === editId);
-      if (found) {
-        setLabel(found.label);
-        setCompletionMode(found.completionMode);
-        setIsActive(found.isActive);
-        setAllowRemind(Boolean(found.allowRemind));
-        let formula = found.formula;
-        try {
-          const a = parse(found.formula);
-          replaceAst(a);
-          formula = serialize(a);
-          setText(formula);
-        } catch {
-          replaceAst({ type: "and", children: [] });
-          setText(found.formula);
-          formula = found.formula;
-        }
-        setBaseline({
-          label: found.label,
-          completionMode: found.completionMode,
-          isActive: found.isActive,
-          allowRemind: Boolean(found.allowRemind),
-          formula,
-        });
-        setTextMode(false);
-        setTextError(null);
+  const applyEditorFromItem = useCallback(
+    (found: ItemRecord) => {
+      setLabel(found.label);
+      setCompletionMode(found.completionMode);
+      setIsActive(found.isActive);
+      setAllowRemind(Boolean(found.allowRemind));
+      let formula = found.formula;
+      try {
+        const a = parse(found.formula);
+        replaceAst(a);
+        formula = serialize(a);
+        setText(formula);
+      } catch {
+        replaceAst({ type: "and", children: [] });
+        setText(found.formula);
+        formula = found.formula;
       }
-    } else {
-      setBaseline(EMPTY_BASELINE);
+      setBaseline({
+        label: found.label,
+        completionMode: found.completionMode,
+        isActive: found.isActive,
+        allowRemind: Boolean(found.allowRemind),
+        formula,
+      });
+      setTextMode(false);
+      setTextError(null);
+    },
+    [replaceAst],
+  );
+
+  const load = useCallback(async (mode: "boot" | "refresh" = "refresh") => {
+    if (mode === "boot") setBooting(true);
+    else setRefreshing(true);
+    try {
+      const [live, archivedPage] = await Promise.all([
+        api.listItems({ limit: PAGE_SIZE, offset: 0 }),
+        api.listArchivedItems({ limit: PAGE_SIZE, offset: 0 }),
+      ]);
+
+      let nextList = live.items;
+      if (editId) {
+        let found = nextList.find((i) => i.id === editId) ?? null;
+        if (!found) {
+          try {
+            const { item } = await api.getItem(editId);
+            if (!item.deletedAt) {
+              found = item;
+              nextList = [item, ...nextList.filter((i) => i.id !== item.id)];
+            }
+          } catch {
+            found = null;
+          }
+        }
+        if (found) applyEditorFromItem(found);
+      } else {
+        setBaseline(EMPTY_BASELINE);
+      }
+
+      setItems(nextList);
+      setArchived(archivedPage.items);
+      setAllIds(nextList.map((i) => i.id));
+      hasMoreItemsRef.current = Boolean(live.hasMore);
+      setHasMoreItems(Boolean(live.hasMore));
+      nextItemsOffsetRef.current = live.nextOffset ?? nextList.length;
+      hasMoreArchivedRef.current = Boolean(archivedPage.hasMore);
+      setHasMoreArchived(Boolean(archivedPage.hasMore));
+      nextArchivedOffsetRef.current =
+        archivedPage.nextOffset ?? archivedPage.items.length;
+      setLoaded(true);
+
+      void api
+        .listItemsMeta()
+        .then((meta) => {
+          setAllIds(meta.ids);
+          setDepsById(meta.deps);
+        })
+        .catch(() => {
+          /* keep ids from loaded page */
+        });
+    } finally {
+      if (mode === "boot") setBooting(false);
+      else setRefreshing(false);
     }
-    setLoaded(true);
-  }, [editId, replaceAst]);
+  }, [editId, applyEditorFromItem]);
+
+  const loadMoreItems = useCallback(async () => {
+    if (loadingMoreItemsRef.current || !hasMoreItemsRef.current) return;
+    loadingMoreItemsRef.current = true;
+    setLoadingMoreItems(true);
+    try {
+      const data = await api.listItems({
+        limit: PAGE_SIZE,
+        offset: nextItemsOffsetRef.current,
+      });
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...data.items.filter((i) => !seen.has(i.id))];
+      });
+      hasMoreItemsRef.current = Boolean(data.hasMore);
+      setHasMoreItems(Boolean(data.hasMore));
+      nextItemsOffsetRef.current =
+        data.nextOffset ?? nextItemsOffsetRef.current + data.items.length;
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      loadingMoreItemsRef.current = false;
+      setLoadingMoreItems(false);
+      requestAnimationFrame(() => {
+        const ul = itemsListRef.current;
+        if (!ul || loadingMoreItemsRef.current || !hasMoreItemsRef.current)
+          return;
+        if (ul.scrollTop <= 0) return;
+        const remaining = ul.scrollHeight - (ul.scrollTop + ul.clientHeight);
+        if (remaining <= 48) void loadMoreItems();
+      });
+    }
+  }, []);
+
+  const loadMoreArchived = useCallback(async () => {
+    if (loadingMoreArchivedRef.current || !hasMoreArchivedRef.current) return;
+    loadingMoreArchivedRef.current = true;
+    setLoadingMoreArchived(true);
+    try {
+      const data = await api.listArchivedItems({
+        limit: PAGE_SIZE,
+        offset: nextArchivedOffsetRef.current,
+      });
+      setArchived((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...data.items.filter((i) => !seen.has(i.id))];
+      });
+      hasMoreArchivedRef.current = Boolean(data.hasMore);
+      setHasMoreArchived(Boolean(data.hasMore));
+      nextArchivedOffsetRef.current =
+        data.nextOffset ??
+        nextArchivedOffsetRef.current + data.items.length;
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      loadingMoreArchivedRef.current = false;
+      setLoadingMoreArchived(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void load();
+    void load("boot");
   }, [load]);
+
+  // Sidebar: load more only when scrolled to the bottom (no prefetch).
+  useEffect(() => {
+    const ul = itemsListRef.current;
+    if (!ul || !hasMoreItems) return;
+    const onScroll = () => {
+      if (loadingMoreItemsRef.current || !hasMoreItemsRef.current) return;
+      if (ul.scrollTop <= 0) return;
+      const remaining = ul.scrollHeight - (ul.scrollTop + ul.clientHeight);
+      if (remaining <= 48) void loadMoreItems();
+    };
+    ul.addEventListener("scroll", onScroll, { passive: true });
+    return () => ul.removeEventListener("scroll", onScroll);
+  }, [hasMoreItems, loadMoreItems, items.length]);
+
+  useEffect(() => {
+    const ul = itemsListRef.current;
+    if (!ul || !hasMoreArchived) return;
+    const onScroll = () => {
+      if (loadingMoreArchivedRef.current || !hasMoreArchivedRef.current) return;
+      // Only when archived section is in play — near list bottom.
+      const remaining = ul.scrollHeight - (ul.scrollTop + ul.clientHeight);
+      if (remaining <= 48) void loadMoreArchived();
+    };
+    ul.addEventListener("scroll", onScroll, { passive: true });
+    return () => ul.removeEventListener("scroll", onScroll);
+  }, [hasMoreArchived, loadMoreArchived, archived.length]);
 
   const issuesFull = useMemo(() => {
     if (!ast) {
       if (completionMode === "once") return [];
       return [
-        { path: "", message: "Empty formula", severity: "error" as const },
+        { path: "", message: "Schedule is empty", severity: "error" as const },
       ];
     }
     if (completionMode === "once" && isAlwaysTrue(ast)) {
       return [
         {
           path: "",
-          message: "Empty formula → always visible until checked (once forever)",
+          message: "Empty schedule → always shows until checked (one-time)",
           severity: "warning" as const,
         },
       ];
@@ -214,13 +372,14 @@ export default function Builder() {
         {
           path: "",
           message:
-            "Empty formula is only allowed for “Once forever”. Add a condition or switch mode.",
+            "Empty schedule is only allowed for One-time. Add a rule or switch mode.",
           severity: "error" as const,
         },
       ];
     }
-    const depMap = new Map<string, string[]>();
+    const depMap = new Map<string, string[]>(Object.entries(depsById));
     for (const it of items) {
+      if (depMap.has(it.id)) continue;
       try {
         depMap.set(it.id, collectDependencies(parse(it.formula)));
       } catch {
@@ -232,7 +391,7 @@ export default function Builder() {
       knownIds,
       existingDeps: depMap,
     });
-  }, [ast, editId, knownIds, items, completionMode]);
+  }, [ast, editId, knownIds, items, depsById, completionMode]);
 
   const hasError = issuesFull.some((i) => i.severity === "error");
 
@@ -340,13 +499,13 @@ export default function Builder() {
       return;
     }
     if (hasError) {
-      setSaveError("Fix formula errors before saving");
+      setSaveError("Fix schedule errors before saving");
       return;
     }
     const formulaAst = ast ? normalizeAst(ast) : ({ type: "true" } as AstNode);
     if (completionMode === "while_valid" && isAlwaysTrue(formulaAst)) {
       setSaveError(
-        "Empty formula is only allowed for “Once forever”",
+        "Empty schedule is only allowed for One-time",
       );
       return;
     }
@@ -515,11 +674,25 @@ export default function Builder() {
         bypassBlockRef.current = true;
         resetToNewForm();
         navigate("/builder");
-      } else await load();
+      }
+      await load();
     } catch (e) {
       setSaveError((e as Error).message);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const restoreArchived = async (it: ItemRecord) => {
+    setRestoringId(it.id);
+    setSaveError(null);
+    try {
+      await api.restoreItem(it.id);
+      await load();
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -535,12 +708,33 @@ export default function Builder() {
     return () => window.removeEventListener("keydown", onKey);
   }, [deleteTarget, deleting, discardOpen, blocker.state]);
 
-  if (!loaded) {
-    return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!loaded || booting) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <h1 className={pageTitle}>Schedule builder</h1>
+        <PageLoader label="Loading builder…" />
+      </div>
+    );
   }
 
+  const busyLabel =
+    saving
+      ? "Saving…"
+      : deleting
+        ? "Archiving…"
+        : cloningId
+          ? "Cloning…"
+          : restoringId
+            ? "Restoring…"
+            : resettingId
+              ? "Resetting…"
+              : refreshing
+                ? "Updating…"
+                : null;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-3">
+      {busyLabel && <PageLoader overlay label={busyLabel} />}
       {discardOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
@@ -603,17 +797,17 @@ export default function Builder() {
               id="delete-dialog-title"
               className="text-lg font-semibold tracking-tight text-slate-900"
             >
-              Delete checklist item?
+              Archive checklist item?
             </h2>
             <p id="delete-dialog-desc" className="mt-2 text-sm text-slate-600">
-              This permanently removes{" "}
+              Hide{" "}
               <span className="font-medium text-slate-900">
                 {deleteTarget.label}
               </span>{" "}
               <span className="font-mono text-xs text-slate-400">
                 ({shortId(deleteTarget.id)})
-              </span>
-              . This cannot be undone.
+              </span>{" "}
+              from the checklist. You can restore it anytime from Archived.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -630,7 +824,7 @@ export default function Builder() {
                 onClick={() => void confirmDelete()}
                 className={btn.danger}
               >
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? "Archiving…" : "Archive"}
               </button>
             </div>
           </div>
@@ -639,9 +833,9 @@ export default function Builder() {
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className={pageTitle}>Formula builder</h1>
+          <h1 className={pageTitle}>Schedule builder</h1>
           <p className="truncate text-sm text-slate-500">
-            Preview · settings · blocks workspace
+            Preview · settings · when-it-shows blocks
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -688,8 +882,8 @@ export default function Builder() {
 
       {!desktop && (
         <div className={`shrink-0 ${banner.warn}`}>
-          Builder editing is designed for desktop. On this screen size the
-          canvas is read-only — open on a laptop to edit formulas.
+          Builder works best on a laptop. On this screen size the canvas is
+          read-only — open on a computer to edit schedules.
         </div>
       )}
 
@@ -738,10 +932,13 @@ export default function Builder() {
                   checked={showCompletedOnce}
                   onChange={(e) => setShowCompletedOnce(e.target.checked)}
                 />
-                Show completed once
+                Show completed one-time items
               </label>
             </div>
-            <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+            <ul
+              ref={itemsListRef}
+              className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain"
+            >
               {visibleItems.map((it) => {
                 const completedOnce =
                   it.completionMode === "once" && Boolean(it.checkedAt);
@@ -792,13 +989,70 @@ export default function Builder() {
                           className="text-[10px] text-red-500 hover:underline"
                           onClick={() => requestDelete(it)}
                         >
-                          Del
+                          Archive
                         </button>
                       </div>
                     )}
                   </li>
                 );
               })}
+              {(hasMoreItems || loadingMoreItems) && (
+                <li className="flex items-center justify-center gap-2 px-2 py-3 text-[10px] text-slate-400">
+                  {loadingMoreItems ? (
+                    <>
+                      <span
+                        className="page-loader__spin h-3.5 w-3.5 rounded-full border-2 border-slate-200 border-t-teal-600"
+                        aria-hidden
+                      />
+                      Loading more…
+                    </>
+                  ) : null}
+                </li>
+              )}
+              {(archived.length > 0 || hasMoreArchived) && (
+                <>
+                  <li className="sticky top-0 z-[1] bg-white pt-3 pb-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Archived
+                      {archived.length > 0 ? ` (${archived.length}${hasMoreArchived ? "+" : ""})` : ""}
+                    </h4>
+                  </li>
+                  {archived.map((it) => (
+                    <li
+                      key={it.id}
+                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm opacity-75"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-slate-500">
+                        <span className="font-medium font-mono text-[10px] text-slate-400">
+                          {shortId(it.id)}
+                        </span>{" "}
+                        {it.label}
+                      </span>
+                      <button
+                        type="button"
+                        className="shrink-0 text-[10px] font-medium text-teal-700 hover:underline disabled:opacity-50"
+                        disabled={restoringId === it.id}
+                        onClick={() => void restoreArchived(it)}
+                      >
+                        {restoringId === it.id ? "…" : "Restore"}
+                      </button>
+                    </li>
+                  ))}
+                  {(hasMoreArchived || loadingMoreArchived) && (
+                    <li className="flex items-center justify-center gap-2 px-2 py-3 text-[10px] text-slate-400">
+                      {loadingMoreArchived ? (
+                        <>
+                          <span
+                            className="page-loader__spin h-3.5 w-3.5 rounded-full border-2 border-slate-200 border-t-teal-600"
+                            aria-hidden
+                          />
+                          Loading more…
+                        </>
+                      ) : null}
+                    </li>
+                  )}
+                </>
+              )}
             </ul>
           </div>
         </aside>
@@ -829,7 +1083,7 @@ export default function Builder() {
               />
             </label>
             <label className="block text-sm">
-              <span className="text-slate-500">Completion mode</span>
+              <span className="text-slate-500">How it finishes</span>
               <select
                 className={`mt-1 ${field}`}
                 value={completionMode}
@@ -839,9 +1093,9 @@ export default function Builder() {
                 }
               >
                 <option value="while_valid">
-                  While formula valid (recurring)
+                  Repeats — shows again when the schedule matches
                 </option>
-                <option value="once">Once forever</option>
+                <option value="once">One-time — done after you check it</option>
               </select>
             </label>
             <div className="flex flex-wrap items-center gap-2">
@@ -861,7 +1115,7 @@ export default function Builder() {
                 title={
                   remindAllowed
                     ? undefined
-                    : "Auto remind needs a formula window (not once forever with empty formula)"
+                    : "Reminders need a timed schedule — not a plain one-time item with no schedule"
                 }
               >
                 <input
@@ -870,7 +1124,7 @@ export default function Builder() {
                   disabled={!desktop || !remindAllowed}
                   onChange={(e) => setAllowRemind(e.target.checked)}
                 />
-                Allow auto remind
+                Remind me early
               </label>
               <div className="ml-auto flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
                 <button
@@ -897,16 +1151,21 @@ export default function Builder() {
                   onClick={switchToText}
                   disabled={!desktop}
                 >
-                  Text DSL
+                  Advanced text
                 </button>
               </div>
             </div>
             <div className="break-all rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-[11px] text-slate-500">
               {formulaText ||
                 (completionMode === "once"
-                  ? "(empty = always visible)"
-                  : "(empty formula)")}
+                  ? "(empty = always until checked)"
+                  : "(empty schedule)")}
             </div>
+            <p className="text-[11px] text-slate-400">
+              <Link to="/help#schedule-rules" className="text-teal-700 underline">
+                Schedule rules & examples
+              </Link>
+            </p>
             {issuesFull.some((i) => i.severity === "warning") && (
               <div className="space-y-1 text-[11px] text-amber-700">
                 {issuesFull
@@ -997,7 +1256,7 @@ export default function Builder() {
               <div>
                 <h3 className={sectionTitle}>Blocks</h3>
                 <p className="text-[11px] text-slate-500">
-                  Drag or click to add into the formula
+                  Drag or click to add to the schedule
                 </p>
               </div>
             </div>

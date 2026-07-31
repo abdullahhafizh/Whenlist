@@ -77,7 +77,16 @@ export default function BlockNode({
   };
 
   if (isContainer) {
-    const label = node.type.toUpperCase();
+    const label =
+      (
+        {
+          and: "And",
+          or: "Or",
+          not: "Not",
+          group: "Group",
+          program: "Program",
+        } as Record<string, string>
+      )[node.type] ?? node.type.toUpperCase();
     const children =
       node.type === "and" || node.type === "or"
         ? node.children

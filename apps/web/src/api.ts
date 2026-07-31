@@ -54,6 +54,7 @@ export type ItemRecord = {
   snoozedWindowAt?: string | null;
   checkedAt: string | null;
   windowStartAt: string | null;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -66,13 +67,23 @@ export function shortId(id: string): string {
 
 export const api = {
   health: () => request<{ ok: boolean; timezone: string }>("/api/health"),
-  getChecklist: () =>
-    request<{
+  getChecklistCount: () =>
+    request<{ total: number }>("/api/checklist/count"),
+  getChecklist: (opts?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit != null) q.set("limit", String(opts.limit));
+    if (opts?.offset != null) q.set("offset", String(opts.offset));
+    const qs = q.toString();
+    return request<{
       now: string;
       timeZone: string;
       items: ChecklistItemView[];
       alerts: ReminderAlert[];
-    }>("/api/checklist"),
+      hasMore?: boolean;
+      nextOffset?: number;
+      total?: number;
+    }>(`/api/checklist${qs ? `?${qs}` : ""}`);
+  },
   check: (id: string) =>
     request<{ item: { id: string; checked: boolean; label: string } }>(
       `/api/checklist/${itemPath(id)}/check`,
@@ -93,7 +104,35 @@ export const api = {
       `/api/checklist/${itemPath(id)}/snooze`,
       { method: "POST" },
     ),
-  listItems: () => request<{ items: ItemRecord[] }>("/api/items"),
+  listItems: (opts?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit != null) q.set("limit", String(opts.limit));
+    if (opts?.offset != null) q.set("offset", String(opts.offset));
+    const qs = q.toString();
+    return request<{
+      items: ItemRecord[];
+      hasMore?: boolean;
+      nextOffset?: number;
+      total?: number;
+    }>(`/api/items${qs ? `?${qs}` : ""}`);
+  },
+  listArchivedItems: (opts?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams({ archived: "1" });
+    if (opts?.limit != null) q.set("limit", String(opts.limit));
+    if (opts?.offset != null) q.set("offset", String(opts.offset));
+    return request<{
+      items: ItemRecord[];
+      hasMore?: boolean;
+      nextOffset?: number;
+      total?: number;
+    }>(`/api/items?${q.toString()}`);
+  },
+  listItemsMeta: () =>
+    request<{ ids: string[]; deps: Record<string, string[]> }>(
+      "/api/items/meta",
+    ),
+  getItem: (id: string) =>
+    request<{ item: ItemRecord }>(`/api/items/${itemPath(id)}`),
   createItem: (body: {
     label: string;
     formula: string;
@@ -124,9 +163,14 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  /** Soft-delete (archive). Item can be restored later. */
   deleteItem: (id: string) =>
-    request<{ ok: boolean }>(`/api/items/${itemPath(id)}`, {
+    request<{ ok: boolean; item?: ItemRecord }>(`/api/items/${itemPath(id)}`, {
       method: "DELETE",
+    }),
+  restoreItem: (id: string) =>
+    request<{ item: ItemRecord }>(`/api/items/${itemPath(id)}/restore`, {
+      method: "POST",
     }),
   validateFormula: (formula: string, selfId?: string) =>
     request<{

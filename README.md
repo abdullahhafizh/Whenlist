@@ -1,6 +1,11 @@
 # Whenlist
 
-The checklist that knows when. Mobile-friendly checklist where each item appears only when its formula evaluates to `true`.
+The checklist that knows when. Mobile-friendly checklist where each item appears only when its schedule matches.
+
+## User guide (plain language)
+
+- In-app: **/help** (basics) and **/help#schedule-rules** (full schedule language + examples)
+- Repo: [`docs/user-guide.md`](docs/user-guide.md), [`docs/schedule-rules.md`](docs/schedule-rules.md)
 
 ## Stack
 

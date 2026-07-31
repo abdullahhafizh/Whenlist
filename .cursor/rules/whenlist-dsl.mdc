@@ -26,4 +26,8 @@ If a feature **parses and evaluates** in `@whenlist/dsl`, it **must** appear in 
 - Empty formula → always true, only with completionMode once
 - allowRemind false for once + empty formula
 
-When adding DSL features: update `ast.ts` BNF, tests, **and** `dslNlRules.ts` in the same change.
+When adding DSL features: update `ast.ts` BNF, tests, **`dslNlRules.ts`**, and the **user-facing** docs in the same change:
+- [`docs/schedule-rules.md`](docs/schedule-rules.md)
+- in-app Help [`apps/web/src/routes/Help.tsx`](apps/web/src/routes/Help.tsx) (`#schedule-rules`)
+
+Users read schedules at **/help#schedule-rules** — not only in Cursor rules.

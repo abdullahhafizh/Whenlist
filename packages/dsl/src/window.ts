@@ -258,9 +258,9 @@ export function dismissOnceSnoozeMarker(
 }
 
 /**
- * Once-mode snooze: hide while the stored marker still matches the current
- * snooze key. Reappears when the formula enters a new validity window, or
- * (for always-true) when the calendar day/hour rolls over.
+ * Hide while the stored marker still matches the current snooze key.
+ * Reappears when the formula enters a new validity window, or
+ * (for always-true / unbounded) when the calendar day/hour rolls over.
  */
 export function isSnoozedAway(input: {
   completionMode: CompletionMode;
@@ -270,7 +270,6 @@ export function isSnoozedAway(input: {
   hourly: boolean;
   timeZone: string;
 }): boolean {
-  if (input.completionMode !== "once") return false;
   if (!input.snoozedWindowAt) return false;
   const key = onceSnoozeKey(input.currentWindow, {
     now: input.now,

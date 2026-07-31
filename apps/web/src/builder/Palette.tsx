@@ -24,15 +24,29 @@ const FIELD_ORDER: TimeField[] = [
 const FIELD_HINT: Record<TimeField, string> = {
   date: "1–31",
   month: "jan–dec",
-  year: "YYYY",
+  year: "year",
   hour: "0–23",
   weekday: "mon–sun",
   meridiem: "am/pm",
   dateMonth: "DD-MM",
   monthYear: "MM-YYYY",
   dateMonthYear: "DD-MM-YYYY",
-  lastDay: "last day of month (28–31)",
-  monthLength: "days in month (28–31)",
+  lastDay: "last day of month",
+  monthLength: "days in this month",
+};
+
+const FIELD_LABEL: Record<TimeField, string> = {
+  date: "Day",
+  month: "Month",
+  year: "Year",
+  hour: "Hour",
+  weekday: "Weekday",
+  meridiem: "AM/PM",
+  dateMonth: "Day-Month",
+  monthYear: "Month-Year",
+  dateMonthYear: "Full date",
+  lastDay: "Month end",
+  monthLength: "Days in month",
 };
 
 export default function Palette({ onAdd }: Props) {
@@ -59,6 +73,7 @@ export default function Palette({ onAdd }: Props) {
     if (!q) return true;
     return (
       f.toLowerCase().includes(q) ||
+      FIELD_LABEL[f].toLowerCase().includes(q) ||
       FIELD_HINT[f].includes(q) ||
       (byField.get(f) ?? []).some((p) => p.label.toLowerCase().includes(q))
     );
@@ -71,7 +86,7 @@ export default function Palette({ onAdd }: Props) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter fields…"
+          placeholder="Search blocks…"
           className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-600/30"
         />
       </div>
@@ -105,7 +120,7 @@ export default function Palette({ onAdd }: Props) {
 
         <div>
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Status
+            Check status
           </p>
           <div className="flex flex-wrap gap-1.5">
             {status.map((item) => (
@@ -131,7 +146,7 @@ export default function Palette({ onAdd }: Props) {
 
         <div>
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Time fields
+            Time
           </p>
           <div className="flex flex-wrap items-start gap-1.5">
             {visibleFields.flatMap((field) => {
@@ -139,16 +154,16 @@ export default function Palette({ onAdd }: Props) {
               return items.map((item) => {
                 const op =
                   item.kind === "compare"
-                    ? "=="
+                    ? "="
                     : item.kind === "between"
                       ? "between"
-                      : "in";
+                      : "in list";
                 return (
                   <button
                     key={item.id}
                     type="button"
                     draggable
-                    title={`${field} ${op} · ${FIELD_HINT[field]}`}
+                    title={`${FIELD_LABEL[field]} ${op} · ${FIELD_HINT[field]}`}
                     onDragStart={(e) => {
                       e.dataTransfer.setData(
                         "application/x-palette",
@@ -159,8 +174,8 @@ export default function Palette({ onAdd }: Props) {
                     onClick={() => onAdd(item)}
                     className="inline-flex w-fit shrink-0 cursor-grab items-baseline gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-left active:cursor-grabbing hover:border-teal-400 hover:bg-teal-50"
                   >
-                    <span className="font-mono text-[11px] font-semibold text-slate-800">
-                      {field}
+                    <span className="text-[11px] font-semibold text-slate-800">
+                      {FIELD_LABEL[field]}
                     </span>
                     <span className="text-[11px] font-medium text-teal-700">
                       {op}
@@ -174,7 +189,7 @@ export default function Palette({ onAdd }: Props) {
             })}
             {visibleFields.length === 0 && (
               <p className="w-full py-4 text-center text-xs text-slate-400">
-                No fields match
+                No matches
               </p>
             )}
           </div>

@@ -49,6 +49,7 @@ type ItemRow = {
   snoozed_window_at: string | null;
   checked_at: string | null;
   window_start_at: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -121,17 +122,78 @@ function itemToJson(row: ItemRow) {
     snoozedWindowAt: row.snoozed_window_at,
     checkedAt: row.checked_at,
     windowStartAt: row.window_start_at,
+    deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
+const LIVE = "deleted_at IS NULL";
+const ARCHIVED = "deleted_at IS NOT NULL";
+
 app.get("/api/items", async (c) => {
-  const { results } = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items ORDER BY sort_order ASC, id ASC",
-  ).all<ItemRow>();
-  const items = (results ?? []).map(itemToJson);
-  return c.json({ items });
+  const archived = c.req.query("archived") === "1";
+  const where = archived ? ARCHIVED : LIVE;
+  const orderBy = archived
+    ? "deleted_at DESC, id ASC"
+    : "sort_order ASC, id ASC";
+
+  const offsetRaw = Number(c.req.query("offset") ?? "0");
+  const offset =
+    Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+  const limitParam = c.req.query("limit");
+  const paging = limitParam != null && limitParam !== "";
+  const limitParsed = Number(limitParam);
+  const limit = paging
+    ? Number.isFinite(limitParsed) && limitParsed > 0
+      ? Math.min(100, Math.floor(limitParsed))
+      : 40
+    : null;
+
+  let rows: ItemRow[];
+  let hasMore = false;
+  let nextOffset: number;
+  let total: number | undefined;
+
+  if (limit != null) {
+    const { results } = await c.env.DB.prepare(
+      `SELECT * FROM checklist_items WHERE ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    )
+      .bind(limit + 1, offset)
+      .all<ItemRow>();
+    const fetched = results ?? [];
+    hasMore = fetched.length > limit;
+    rows = hasMore ? fetched.slice(0, limit) : fetched;
+    nextOffset = offset + rows.length;
+  } else {
+    const { results } = await c.env.DB.prepare(
+      `SELECT * FROM checklist_items WHERE ${where} ORDER BY ${orderBy}`,
+    ).all<ItemRow>();
+    rows = results ?? [];
+    nextOffset = rows.length;
+    total = rows.length;
+  }
+
+  const items = rows.map(itemToJson);
+
+  return c.json({
+    items,
+    hasMore,
+    nextOffset,
+    ...(total != null ? { total } : {}),
+  });
+});
+
+/** Lightweight id + dependency graph for builder validation (non-blocking for list). */
+app.get("/api/items/meta", async (c) => {
+  const { results: idRows } = await c.env.DB.prepare(
+    `SELECT id FROM checklist_items WHERE ${LIVE} ORDER BY sort_order ASC, id ASC`,
+  ).all<{ id: string }>();
+  const depMap = await loadAllDeps(c.env.DB);
+  return c.json({
+    ids: (idRows ?? []).map((r) => r.id),
+    deps: Object.fromEntries(depMap),
+  });
 });
 
 app.get("/api/items/:id", async (c) => {
@@ -197,7 +259,7 @@ async function validateUpsert(
   }
 
   const { results } = await db
-    .prepare("SELECT id FROM checklist_items")
+    .prepare(`SELECT id FROM checklist_items WHERE ${LIVE}`)
     .all<{ id: string }>();
   const knownIds = new Set((results ?? []).map((r) => r.id));
   if (selfId !== undefined) knownIds.add(selfId);
@@ -266,7 +328,7 @@ app.post("/api/items", async (c) => {
 app.post("/api/items/:id/clone", async (c) => {
   const id = c.req.param("id") as string;
   const existing = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ?",
+    `SELECT * FROM checklist_items WHERE id = ? AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();
@@ -322,7 +384,7 @@ app.put("/api/items/:id", async (c) => {
   const id = c.req.param("id") as string;
 
   const existing = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ?",
+    `SELECT * FROM checklist_items WHERE id = ? AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();
@@ -386,7 +448,7 @@ app.delete("/api/items/:id", async (c) => {
   const dependents = await c.env.DB.prepare(
     `SELECT i.id, i.label FROM item_dependencies d
      JOIN checklist_items i ON i.id = d.item_id
-     WHERE d.depends_on = ?`,
+     WHERE d.depends_on = ? AND i.deleted_at IS NULL`,
   )
     .bind(id)
     .all<{ id: string; label: string }>();
@@ -405,19 +467,44 @@ app.delete("/api/items/:id", async (c) => {
   }
 
   const existing = await c.env.DB.prepare(
-    "SELECT id FROM checklist_items WHERE id = ?",
+    `SELECT id FROM checklist_items WHERE id = ? AND ${LIVE}`,
   )
     .bind(id)
     .first();
   if (!existing) return c.json({ error: "Not found" }, 404);
 
-  await c.env.DB.prepare("DELETE FROM item_dependencies WHERE item_id = ?")
+  // Soft-delete — keep row + deps so it can be restored later.
+  const result = await c.env.DB.prepare(
+    `UPDATE checklist_items
+     SET deleted_at = datetime('now'), updated_at = datetime('now')
+     WHERE id = ? AND ${LIVE}
+     RETURNING *`,
+  )
     .bind(id)
-    .run();
-  await c.env.DB.prepare("DELETE FROM checklist_items WHERE id = ?")
+    .first<ItemRow>();
+
+  return c.json({ ok: true, item: itemToJson(result!) });
+});
+
+app.post("/api/items/:id/restore", async (c) => {
+  const id = c.req.param("id") as string;
+  const existing = await c.env.DB.prepare(
+    `SELECT id FROM checklist_items WHERE id = ? AND ${ARCHIVED}`,
+  )
     .bind(id)
-    .run();
-  return c.json({ ok: true });
+    .first();
+  if (!existing) return c.json({ error: "Not found" }, 404);
+
+  const result = await c.env.DB.prepare(
+    `UPDATE checklist_items
+     SET deleted_at = NULL, updated_at = datetime('now')
+     WHERE id = ?
+     RETURNING *`,
+  )
+    .bind(id)
+    .first<ItemRow>();
+
+  return c.json({ item: itemToJson(result!) });
 });
 
 app.patch("/api/items/reorder", async (c) => {
@@ -446,7 +533,7 @@ app.post("/api/formula/validate", async (c) => {
   const selfId = body.selfId;
 
   const { results } = await c.env.DB.prepare(
-    "SELECT id FROM checklist_items",
+    `SELECT id FROM checklist_items WHERE ${LIVE}`,
   ).all<{ id: string }>();
   const knownIds = new Set((results ?? []).map((r) => r.id));
   const existingDeps = await loadAllDeps(c.env.DB);
@@ -533,7 +620,7 @@ app.post("/api/nl/parse", async (c) => {
 
   if (candidate.formula.trim()) {
     const { results } = await c.env.DB.prepare(
-      "SELECT id FROM checklist_items",
+      `SELECT id FROM checklist_items WHERE ${LIVE}`,
     ).all<{ id: string }>();
     const knownIds = new Set((results ?? []).map((r) => r.id));
     const existingDeps = await loadAllDeps(c.env.DB);
@@ -592,7 +679,9 @@ async function buildStatusMap(
   results: ItemRow[];
 }> {
   const { results } = await db
-    .prepare("SELECT * FROM checklist_items WHERE is_active = 1")
+    .prepare(
+      `SELECT * FROM checklist_items WHERE is_active = 1 AND ${LIVE}`,
+    )
     .all<ItemRow>();
   const items = results ?? [];
   const deps = await loadAllDeps(db);
@@ -630,16 +719,130 @@ async function buildStatusMap(
   return { statusMap, byId, results: items };
 }
 
+app.get("/api/checklist/count", async (c) => {
+  // Count items that would appear on the checklist now (same rules as GET /api/checklist),
+  // not all active rows — entrance drop shells must match visible cards.
+  const timeZone = c.env.APP_TIMEZONE || "Asia/Jakarta";
+  const now = new Date();
+  const deps = await loadAllDeps(c.env.DB);
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM checklist_items WHERE is_active = 1 AND ${LIVE} ORDER BY sort_order ASC, id ASC`,
+  ).all<ItemRow>();
+  const items = results ?? [];
+  const ids = items.map((i) => i.id);
+  let order: string[];
+  try {
+    order = topologicalSort(ids, deps);
+  } catch {
+    order = ids;
+  }
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const statusMap: Record<string, boolean> = {};
+  for (const id of order) {
+    const row = byId.get(id)!;
+    let ast: AstNode;
+    try {
+      ast = parse(row.formula);
+    } catch {
+      continue;
+    }
+    const currentWindow = deriveWindowStart(ast, {
+      now,
+      statusMap,
+      selfId: id,
+      timeZone,
+    });
+    statusMap[id] = isEffectivelyChecked({
+      completionMode: row.completion_mode,
+      checkedAt: row.checked_at,
+      windowStartAt: row.window_start_at,
+      currentWindow,
+    });
+  }
+
+  let total = 0;
+  for (const row of items) {
+    let ast: AstNode;
+    try {
+      ast = parse(row.formula);
+    } catch {
+      continue;
+    }
+    const currentlyValid = evaluate(ast, {
+      now,
+      statusMap,
+      selfId: row.id,
+      timeZone,
+    });
+    if (!currentlyValid) continue;
+    const currentWindow = deriveWindowStart(ast, {
+      now,
+      statusMap,
+      selfId: row.id,
+      timeZone,
+    });
+    const hourly = usesHourGranularity(ast);
+    const snoozed = isSnoozedAway({
+      completionMode: row.completion_mode,
+      snoozedWindowAt: row.snoozed_window_at,
+      currentWindow,
+      now,
+      hourly,
+      timeZone,
+    });
+    if (snoozed) continue;
+    if (row.completion_mode === "once" && Boolean(statusMap[row.id])) continue;
+    total += 1;
+  }
+
+  return c.json({ total });
+});
+
 app.get("/api/checklist", async (c) => {
   const timeZone = c.env.APP_TIMEZONE || "Asia/Jakarta";
   const now = new Date();
+  const nowIso = now.toISOString();
 
-  const { results } = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE is_active = 1 ORDER BY sort_order ASC, id ASC",
-  ).all<ItemRow>();
-  const items = results ?? [];
+  const offsetRaw = Number(c.req.query("offset") ?? "0");
+  const offset =
+    Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+  const limitParam = c.req.query("limit");
+  const paging = limitParam != null && limitParam !== "";
+  const limitParsed = Number(limitParam);
+  const limit = paging
+    ? Number.isFinite(limitParsed) && limitParsed > 0
+      ? Math.min(100, Math.floor(limitParsed))
+      : 12
+    : null;
+  /** Collect one extra visible item to know hasMore without a full pass. */
+  const visibleCap =
+    limit != null ? offset + limit + 1 : Number.POSITIVE_INFINITY;
+
   const deps = await loadAllDeps(c.env.DB);
+  const hasAnyDeps = [...deps.values()].some((d) => d.length > 0);
+
+  // Independent rows (no deps): only read a SQL window — critical for large seeds.
+  const sqlWindow =
+    !hasAnyDeps && limit != null
+      ? { offset, limit: limit + 1 + 16 }
+      : null;
+
+  const { results } = sqlWindow
+    ? await c.env.DB.prepare(
+        `SELECT * FROM checklist_items WHERE is_active = 1 AND ${LIVE} ORDER BY sort_order ASC, id ASC LIMIT ? OFFSET ?`,
+      )
+        .bind(sqlWindow.limit, sqlWindow.offset)
+        .all<ItemRow>()
+    : await c.env.DB.prepare(
+        `SELECT * FROM checklist_items WHERE is_active = 1 AND ${LIVE} ORDER BY sort_order ASC, id ASC`,
+      ).all<ItemRow>();
+  const items = results ?? [];
   const ids = items.map((i) => i.id);
+  const sqlWindowFull =
+    sqlWindow != null && items.length >= sqlWindow.limit;
+
+  // When SQL is already offset to the page, fill only limit+1 within this window.
+  const fillCap = sqlWindow != null && limit != null ? limit + 1 : visibleCap;
 
   let order: string[];
   try {
@@ -652,8 +855,17 @@ app.get("/api/checklist", async (c) => {
   const statusMap: Record<string, boolean> = {};
   const astById = new Map<string, AstNode>();
 
+  // Without cross-item deps we can stop parsing once the page (+1) is filled.
+  const shortCircuit = !hasAnyDeps && limit != null;
+  let shortVisible = 0;
+
   for (const id of order) {
     const row = byId.get(id)!;
+    if (shortCircuit && shortVisible >= fillCap) {
+      if (offset > 0 || sqlWindow != null) break;
+      if (row.allow_remind !== 1 && !row.remind_at) continue;
+    }
+
     let ast: AstNode;
     try {
       ast = parse(row.formula);
@@ -673,17 +885,55 @@ app.get("/api/checklist", async (c) => {
       windowStartAt: row.window_start_at,
       currentWindow,
     });
+
+    if (shortCircuit && shortVisible < fillCap) {
+      const currentlyValid = evaluate(ast, {
+        now,
+        statusMap,
+        selfId: id,
+        timeZone,
+      });
+      if (currentlyValid) {
+        const hourly = usesHourGranularity(ast);
+        const snoozed = isSnoozedAway({
+          completionMode: row.completion_mode,
+          snoozedWindowAt: row.snoozed_window_at,
+          currentWindow,
+          now,
+          hourly,
+          timeZone,
+        });
+        const checked = Boolean(statusMap[id]);
+        if (!snoozed && !(row.completion_mode === "once" && checked)) {
+          shortVisible += 1;
+        }
+      }
+    }
   }
 
-  const nowIso = now.toISOString();
   const visible = [];
   const alerts: { id: string; label: string; remindAt: string }[] = [];
   const clearDismissIds: string[] = [];
   const clearSnoozeIds: string[] = [];
 
+  // When SQL already windowed by visible offset, collect from the start of this window.
+  const pageOffset = sqlWindow != null ? 0 : offset;
+
   for (const row of items) {
     const ast = astById.get(row.id);
-    if (!ast) continue;
+    if (!ast) {
+      if (shortCircuit && shortVisible >= fillCap && (offset > 0 || sqlWindow != null))
+        break;
+      continue;
+    }
+
+    const localCap = fillCap;
+
+    if (visible.length >= localCap) {
+      if (offset > 0 || sqlWindow != null) break;
+      if (row.allow_remind !== 1 && !row.remind_at) continue;
+    }
+
     const currentlyValid = evaluate(ast, {
       now,
       statusMap,
@@ -691,37 +941,40 @@ app.get("/api/checklist", async (c) => {
       timeZone,
     });
 
-    if (currentlyValid && row.remind_at) {
-      clearDismissIds.push(row.id);
-      row.remind_at = null;
-    }
+    if (offset === 0) {
+      if (currentlyValid && row.remind_at) {
+        clearDismissIds.push(row.id);
+        row.remind_at = null;
+      }
 
-    if (row.allow_remind === 1 && !currentlyValid) {
-      const derived = deriveRemindAt(ast, {
-        now,
-        statusMap,
-        selfId: row.id,
-        timeZone,
-      });
-      const due = resolveAutoRemind({
-        allowRemind: true,
-        currentlyValid: false,
-        dismissedForWindowAt: row.remind_at,
-        nowIso,
-        derived,
-        hourly: usesHourGranularity(ast),
-        timeZone,
-      });
-      if (due) {
-        alerts.push({
-          id: row.id,
-          label: row.label,
-          remindAt: due.remindAt,
+      if (row.allow_remind === 1 && !currentlyValid) {
+        const derived = deriveRemindAt(ast, {
+          now,
+          statusMap,
+          selfId: row.id,
+          timeZone,
         });
+        const due = resolveAutoRemind({
+          allowRemind: true,
+          currentlyValid: false,
+          dismissedForWindowAt: row.remind_at,
+          nowIso,
+          derived,
+          hourly: usesHourGranularity(ast),
+          timeZone,
+        });
+        if (due) {
+          alerts.push({
+            id: row.id,
+            label: row.label,
+            remindAt: due.remindAt,
+          });
+        }
       }
     }
 
     if (!currentlyValid) continue;
+    if (visible.length >= localCap) continue;
 
     const currentWindow = deriveWindowStart(ast, {
       now,
@@ -758,7 +1011,7 @@ app.get("/api/checklist", async (c) => {
       formula: row.formula,
       allowRemind: row.allow_remind === 1,
       remindAt: row.remind_at,
-      canSnooze: row.completion_mode === "once",
+      canSnooze: true,
     });
   }
 
@@ -784,11 +1037,26 @@ app.get("/api/checklist", async (c) => {
       .run();
   }
 
+  let pageItems = visible;
+  let hasMore = false;
+  let nextOffset = (sqlWindow != null ? offset : 0) + visible.length;
+  let total: number | undefined = paging ? undefined : visible.length;
+  if (limit != null) {
+    const sliced = visible.slice(pageOffset, pageOffset + limit);
+    hasMore =
+      visible.length > pageOffset + sliced.length || sqlWindowFull;
+    pageItems = sliced;
+    nextOffset = offset + pageItems.length;
+  }
+
   return c.json({
     now: nowIso,
     timeZone,
-    items: visible,
-    alerts,
+    items: pageItems,
+    alerts: offset === 0 ? alerts : [],
+    hasMore,
+    nextOffset,
+    ...(total != null ? { total } : {}),
   });
 });
 
@@ -798,17 +1066,11 @@ app.post("/api/checklist/:id/snooze", async (c) => {
   const now = new Date();
 
   const row = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ? AND is_active = 1",
+    `SELECT * FROM checklist_items WHERE id = ? AND is_active = 1 AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();
   if (!row) return c.json({ error: "Not found" }, 404);
-  if (row.completion_mode !== "once") {
-    return c.json(
-      { error: "Snooze is only available for once-forever items" },
-      400,
-    );
-  }
 
   const { statusMap } = await buildStatusMap(c.env.DB, now, timeZone);
 
@@ -856,7 +1118,7 @@ app.post("/api/checklist/:id/remind/dismiss", async (c) => {
   const now = new Date();
 
   const row = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ? AND is_active = 1",
+    `SELECT * FROM checklist_items WHERE id = ? AND is_active = 1 AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();
@@ -907,7 +1169,7 @@ app.post("/api/checklist/:id/check", async (c) => {
   const now = new Date();
 
   const row = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ? AND is_active = 1",
+    `SELECT * FROM checklist_items WHERE id = ? AND is_active = 1 AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();
@@ -961,7 +1223,7 @@ app.post("/api/checklist/:id/uncheck", async (c) => {
   const id = c.req.param("id") as string;
 
   const row = await c.env.DB.prepare(
-    "SELECT * FROM checklist_items WHERE id = ? AND is_active = 1",
+    `SELECT * FROM checklist_items WHERE id = ? AND is_active = 1 AND ${LIVE}`,
   )
     .bind(id)
     .first<ItemRow>();

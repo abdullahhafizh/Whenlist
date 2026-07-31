@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply checklist-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply checklist-db --remote",
+    "db:seed:anim": "node ./scripts/seed-anim.mjs",
     "typecheck": "tsc --noEmit",
     "test": "echo 'no api unit tests'"
   },

@@ -50,27 +50,27 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
       />
       <dl className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-slate-600">
         <div>
-          <dt className="text-slate-400">date</dt>
+          <dt className="text-slate-400">Day of month</dt>
           <dd className="font-mono">{parts.date}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">month</dt>
+          <dt className="text-slate-400">Month</dt>
           <dd className="font-mono">{parts.month}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">weekday</dt>
+          <dt className="text-slate-400">Weekday</dt>
           <dd className="font-mono">{parts.weekday}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">hour</dt>
+          <dt className="text-slate-400">Hour</dt>
           <dd className="font-mono">{parts.hour}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">meridiem</dt>
+          <dt className="text-slate-400">AM/PM</dt>
           <dd className="font-mono">{parts.meridiem}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">year</dt>
+          <dt className="text-slate-400">Year</dt>
           <dd className="font-mono">{parts.year}</dd>
         </div>
       </dl>
@@ -83,7 +83,11 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
               : statusFalse
         }`}
       >
-        {result === null ? "No formula" : result ? "TRUE" : "FALSE"}
+        {result === null
+          ? "No schedule"
+          : result
+            ? "Showing now"
+            : "Hidden now"}
       </div>
     </div>
   );

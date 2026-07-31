@@ -106,10 +106,10 @@ export function createDefaultNode(item: PaletteItem): AstNode {
 }
 
 export const PALETTE: PaletteItem[] = [
-  { id: "and", kind: "and", label: "AND" },
-  { id: "or", kind: "or", label: "OR" },
-  { id: "group", kind: "group", label: "Group ( )" },
-  { id: "not", kind: "not", label: "NOT" },
+  { id: "and", kind: "and", label: "And" },
+  { id: "or", kind: "or", label: "Or" },
+  { id: "group", kind: "group", label: "Group" },
+  { id: "not", kind: "not", label: "Not" },
   ...([
     "date",
     "month",
@@ -122,54 +122,70 @@ export const PALETTE: PaletteItem[] = [
     "dateMonthYear",
     "lastDay",
     "monthLength",
-  ] as TimeField[]).flatMap((field) => [
-    {
-      id: `${field}-eq`,
-      kind: "compare" as const,
-      label: `${field} ==`,
-      field,
-    },
-    {
-      id: `${field}-between`,
-      kind: "between" as const,
-      label: `${field} between`,
-      field,
-    },
-    {
-      id: `${field}-in`,
-      kind: "in" as const,
-      label: `${field} in`,
-      field,
-    },
-  ]),
+  ] as TimeField[]).flatMap((field) => {
+    const names: Record<string, string> = {
+      date: "Day",
+      month: "Month",
+      year: "Year",
+      hour: "Hour",
+      weekday: "Weekday",
+      meridiem: "AM/PM",
+      dateMonth: "Day-Month",
+      monthYear: "Month-Year",
+      dateMonthYear: "Full date",
+      lastDay: "Month end",
+      monthLength: "Days in month",
+    };
+    const n = names[field] ?? field;
+    return [
+      {
+        id: `${field}-eq`,
+        kind: "compare" as const,
+        label: `${n} =`,
+        field,
+      },
+      {
+        id: `${field}-between`,
+        kind: "between" as const,
+        label: `${n} between`,
+        field,
+      },
+      {
+        id: `${field}-in`,
+        kind: "in" as const,
+        label: `${n} in list`,
+        field,
+      },
+    ];
+  }),
   {
     id: "weekend",
     kind: "weekend",
-    label: "weekend",
+    label: "Weekend",
   },
   {
     id: "checked-self",
     kind: "status",
-    label: "checked (self)",
+    label: "Checked (this item)",
     statusChecked: true,
   },
   {
     id: "notchecked-self",
     kind: "status",
-    label: "notChecked (self)",
+    label: "Not checked (this item)",
     statusChecked: false,
   },
   {
     id: "checked-id",
     kind: "status",
-    label: "checked(id)",
+    label: "Checked (other…)",
     statusChecked: true,
     withId: true,
   },
   {
     id: "notchecked-id",
     kind: "status",
-    label: "notChecked(id)",
+    label: "Not checked (other…)",
     statusChecked: false,
     withId: true,
   },

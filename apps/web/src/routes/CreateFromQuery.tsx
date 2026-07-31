@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import Button from "../ui/Button";
+import PageLoader from "../ui/PageLoader";
 import {
   banner,
   btn,
@@ -106,7 +107,7 @@ export default function CreateFromQuery() {
   };
 
   return (
-    <div className="mx-auto max-w-lg space-y-5">
+    <div className="relative mx-auto max-w-lg space-y-5">
       <div>
         <h1 className={pageTitle}>Create from text</h1>
         <p className="mt-1 text-sm text-slate-600">
@@ -114,6 +115,14 @@ export default function CreateFromQuery() {
           formula — review, then save.
         </p>
       </div>
+
+      {parsing && !parsedOnce ? (
+        <PageLoader label="Parsing…" />
+      ) : (
+        <>
+          {(parsing || saving) && (
+            <PageLoader overlay label={saving ? "Saving…" : "Parsing…"} />
+          )}
 
       <label className="block space-y-1.5">
         <span className={label}>Request</span>
@@ -128,7 +137,7 @@ export default function CreateFromQuery() {
 
       <Button
         className="w-full"
-        disabled={parsing || !text.trim()}
+        disabled={parsing || saving || !text.trim()}
         onClick={() => void runParse(text)}
       >
         {parsing ? "Parsing…" : "Parse with AI"}
@@ -195,7 +204,7 @@ export default function CreateFromQuery() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               className="flex-1"
-              disabled={saving || !labelValue.trim()}
+              disabled={saving || parsing || !labelValue.trim()}
               onClick={() => void save()}
             >
               {saving ? "Saving…" : "Save item"}
@@ -205,6 +214,8 @@ export default function CreateFromQuery() {
             </Link>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
