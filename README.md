@@ -103,7 +103,7 @@ Grammar / AST: see comments in [`packages/dsl/src/ast.ts`](packages/dsl/src/ast.
 
 **Git-connected Pages / Workers Builds:** this monorepo is **pnpm-only**. Set install to `pnpm install --frozen-lockfile` (see [`apps/web/PUBLIC_DEPLOY.txt`](apps/web/PUBLIC_DEPLOY.txt)). A present `bun.lock` makes Cloudflare run Bun and fail frozen installs.
 
-**Workers Builds deploy command** must be `pnpm deploy:api` (not `npx wrangler deploy` — wrangler is only a dependency of `apps/api`).
+**Workers Builds:** install `pnpm install --frozen-lockfile`. Deploy may stay as `npx wrangler deploy` (root now includes `wrangler` + [`wrangler.toml`](wrangler.toml)). Put the real D1 `database_id` in **both** root and `apps/api/wrangler.toml`. See [`apps/web/PUBLIC_DEPLOY.txt`](apps/web/PUBLIC_DEPLOY.txt).
 
 > **Rebrand note:** The Worker is named `whenlist-api`. If you previously deployed as `checklist-api`, update `VITE_API_BASE_URL` to the new Workers URL after deploy, then remove the old Worker from the Cloudflare dashboard once verified.
 

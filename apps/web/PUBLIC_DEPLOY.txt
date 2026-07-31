@@ -9,13 +9,15 @@
 # ---------------------------------------------------------------------------
 # Root directory:     /  (repository root)
 # Install command:    pnpm install --frozen-lockfile
-# Deploy command:     pnpm deploy:api
-#   (or: pnpm --filter @whenlist/api deploy)
-# DO NOT use:         npx wrangler deploy
-#   wrangler lives in apps/api — npx from repo root cannot find it.
-# Config path:        apps/api/wrangler.toml (used automatically by the
-#                     package deploy script, which runs in apps/api)
+# Build command:      (optional) pnpm --filter @whenlist/api build
+#                     Avoid `pnpm run build` here if you only deploy the Worker —
+#                     that also builds the web app.
+# Deploy command:     npx wrangler deploy
+#                     (root has wrangler + wrangler.toml → apps/api entry)
+#   also OK:          pnpm deploy:api
 #
+# Put the real D1 database_id in BOTH:
+#   wrangler.toml  AND  apps/api/wrangler.toml
 # ---------------------------------------------------------------------------
 # Pages (web UI)
 # ---------------------------------------------------------------------------

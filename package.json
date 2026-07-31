@@ -11,13 +11,15 @@
     "dev:api": "pnpm --filter @whenlist/api dev",
     "dev:web": "pnpm --filter @whenlist/web dev",
     "build": "pnpm -r build",
+    "deploy": "wrangler deploy",
     "deploy:api": "pnpm --filter @whenlist/api deploy",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.115.0"
   },
   "workspaces": [
     "packages/*",

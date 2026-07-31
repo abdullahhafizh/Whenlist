@@ -1,8 +1,7 @@
-# Local convenience: same Worker as root wrangler.toml.
-# Prefer running via package scripts (they pass --config ../../wrangler.toml).
-# Kept so `cd apps/api && wrangler …` without flags still works.
+# Used by Cloudflare Workers Builds (`npx wrangler deploy` from repo root)
+# and by `pnpm --filter @whenlist/api` scripts via --config.
 name = "whenlist-api"
-main = "src/index.ts"
+main = "apps/api/src/index.ts"
 compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
 
@@ -10,7 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "checklist-db"
 database_id = "00000000-0000-0000-0000-000000000000"
-migrations_dir = "migrations"
+migrations_dir = "apps/api/migrations"
 
 [vars]
 APP_TIMEZONE = "Asia/Jakarta"
