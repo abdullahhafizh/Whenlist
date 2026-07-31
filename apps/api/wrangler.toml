@@ -7,8 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "checklist-db"
-# Replace with the UUID from: npx wrangler d1 create checklist-db
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "5c961437-f59c-4a43-9f81-c1abbc36f3d5"
 migrations_dir = "migrations"
 
 [vars]
