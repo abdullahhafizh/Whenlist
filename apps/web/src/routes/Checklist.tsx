@@ -31,6 +31,9 @@ const DROP_SLOT_CAP = 60;
  * Timing for cards that peel off the standing first item.
  * Index 0 never drops — it only stands. `--fall-from-y` is measured so the
  * pile sits exactly on that stand seat (not above it).
+ *
+ * Same cubic cascade as before for ≥10 cards. Below that, the 1100ms span
+ * scales by (n-1)/9 so few cards don't inherit a "thousand-card" wait.
  */
 function fallDropStyle(
   index: number,
@@ -45,8 +48,10 @@ function fallDropStyle(
   const movers = Math.max(1, n - 1);
   const moverI = i - 1;
   const t = movers <= 1 ? 0 : (movers - 1 - moverI) / (movers - 1);
-  const delayMs = Math.round(1100 * t ** 3.1);
-  const durMs = Math.round(380 + 520 * t ** 2.2);
+  // Full drama at 10+ cards; proportional span for smaller piles.
+  const scale = Math.min(1, (n - 1) / 9);
+  const delayMs = Math.round(1100 * scale * t ** 3.1);
+  const durMs = Math.round(380 + 520 * scale * t ** 2.2);
 
   return {
     "--fall-delay": `${delayMs}ms`,

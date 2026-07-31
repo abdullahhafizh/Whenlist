@@ -6,6 +6,13 @@
   --color-brand-hover: var(--color-teal-800);
 }
 
+/* Match builder desktop (≥900px): hide chrome on phones / narrow tablets */
+@media (max-width: 899px) {
+  .app-nav {
+    display: none !important;
+  }
+}
+
 /* Hide scrollbars on Checklist (mobile) — scroll still works */
 @media (max-width: 639px) {
   html.checklist-route,
