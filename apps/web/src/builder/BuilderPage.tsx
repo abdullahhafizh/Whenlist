@@ -409,7 +409,13 @@ export default function Builder() {
   };
 
   const onRemove = (path: number[]) => {
-    commitAst((prev) => (prev ? removeAt(prev, path) : prev));
+    commitAst((prev) => {
+      if (!prev) return prev;
+      const next = removeAt(prev, path);
+      // Root delete / cleared tree → empty schedule (same as always-true).
+      if (!next || isAlwaysTrue(next)) return { type: "and", children: [] };
+      return next;
+    });
   };
 
   const onDuplicate = (path: number[]) => {
@@ -423,7 +429,8 @@ export default function Builder() {
   ) => {
     const child = dropPaletteNode(item);
     commitAst((prev) => {
-      if (!prev) return child;
+      // Empty / always-true canvas: first block becomes the schedule root.
+      if (!prev || isAlwaysTrue(prev)) return child;
       if (parentPath.length === 0 && prev.type !== "and" && prev.type !== "or") {
         return {
           type: "and",
@@ -464,7 +471,7 @@ export default function Builder() {
   const addFromPalette = (item: PaletteItem) => {
     const child = createDefaultNode(item);
     commitAst((prev) => {
-      if (!prev) return child;
+      if (!prev || isAlwaysTrue(prev)) return child;
       if (prev.type === "and" || prev.type === "or") {
         return {
           ...prev,
@@ -1207,18 +1214,22 @@ export default function Builder() {
                   e.preventDefault();
                   const palette =
                     e.dataTransfer.getData("application/x-palette");
-                  if (palette && ast) {
-                    onDropPalette(
-                      [],
-                      ast.type === "and" || ast.type === "or"
-                        ? ast.children.length
-                        : 0,
-                      JSON.parse(palette) as PaletteItem,
-                    );
+                  if (!palette) return;
+                  const item = JSON.parse(palette) as PaletteItem;
+                  if (!ast || isAlwaysTrue(ast)) {
+                    onDropPalette([], 0, item);
+                    return;
                   }
+                  onDropPalette(
+                    [],
+                    ast.type === "and" || ast.type === "or"
+                      ? ast.children.length
+                      : 0,
+                    item,
+                  );
                 }}
               >
-                {ast ? (
+                {ast && !isAlwaysTrue(ast) ? (
                   <BlockNode
                     node={ast}
                     path={[]}
