@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import {
   evaluate,
   extractTimeParts,
-  findNextWindowStart,
-  findPrevWindowStart,
+  findNextTrueMoment,
+  findPrevTrueMoment,
   usesHourGranularity,
   type AstNode,
 } from "@whenlist/dsl";
@@ -28,10 +28,18 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-/** Round-trip an absolute ISO into the picker's local `YYYY-MM-DDTHH:mm` string. */
-function isoToLocalPicker(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** Picker wall clock is Asia/Jakarta (same TZ the DSL evaluates in). */
+function parseJakartaWall(localIso: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(localIso);
+  if (!m) return new Date();
+  return new Date(
+    `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+07:00`,
+  );
+}
+
+function toJakartaPickerIso(absoluteIso: string): string {
+  const p = extractTimeParts(new Date(absoluteIso), TZ);
+  return `${p.year}-${pad(p.month)}-${pad(p.date)}T${pad(p.hour)}:00`;
 }
 
 function formatWindow(iso: string, hourly: boolean): string {
@@ -42,11 +50,11 @@ function formatWindow(iso: string, hourly: boolean): string {
 
 export default function LivePreview({ ast, selfId, statusMap }: Props) {
   const [localIso, setLocalIso] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const p = extractTimeParts(new Date(), TZ);
+    return `${p.year}-${pad(p.month)}-${pad(p.date)}T${pad(p.hour)}:00`;
   });
 
-  const now = useMemo(() => new Date(localIso), [localIso]);
+  const now = useMemo(() => parseJakartaWall(localIso), [localIso]);
   const parts = useMemo(() => extractTimeParts(now, TZ), [now]);
 
   const evalCtx = useMemo(
@@ -71,7 +79,7 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
   const prevIso = useMemo(() => {
     if (!ast || result === null) return null;
     try {
-      return findPrevWindowStart(ast, evalCtx);
+      return findPrevTrueMoment(ast, evalCtx);
     } catch {
       return null;
     }
@@ -80,7 +88,7 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
   const nextIso = useMemo(() => {
     if (!ast || result === null) return null;
     try {
-      return findNextWindowStart(ast, evalCtx);
+      return findNextTrueMoment(ast, evalCtx);
     } catch {
       return null;
     }
@@ -144,7 +152,7 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
                 type="button"
                 className="text-left text-teal-700 underline-offset-2 hover:underline"
                 title="Jump to this time"
-                onClick={() => setLocalIso(isoToLocalPicker(prevIso))}
+                onClick={() => setLocalIso(toJakartaPickerIso(prevIso))}
               >
                 {formatWindow(prevIso, hourly)}
               </button>
@@ -161,7 +169,7 @@ export default function LivePreview({ ast, selfId, statusMap }: Props) {
                 type="button"
                 className="text-left text-teal-700 underline-offset-2 hover:underline"
                 title="Jump to this time"
-                onClick={() => setLocalIso(isoToLocalPicker(nextIso))}
+                onClick={() => setLocalIso(toJakartaPickerIso(nextIso))}
               >
                 {formatWindow(nextIso, hourly)}
               </button>

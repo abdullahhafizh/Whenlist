@@ -13,6 +13,12 @@
   }
 }
 
+@media (min-width: 900px) {
+  .checklist-later-hold {
+    display: none !important;
+  }
+}
+
 /* Hide scrollbars on Checklist (mobile) — scroll still works */
 @media (max-width: 639px) {
   html.checklist-route,

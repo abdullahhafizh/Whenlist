@@ -184,6 +184,43 @@ export function findPrevWindowStart(
 }
 
 /**
+ * Live-preview neighbors: nearest earlier / later step where the formula is
+ * true (does not skip the rest of a multi-day run like findNextWindowStart).
+ * Example `weekend` on Saturday → previous Sunday, next Sunday.
+ */
+export function findPrevTrueMoment(
+  ast: AstNode,
+  ctx: EvalContext,
+): string | null {
+  const timeZone = ctx.timeZone ?? "Asia/Jakarta";
+  const { stepMs, maxSteps } = stepConfig(ast);
+  let cursor = new Date(ctx.now.getTime());
+  for (let steps = 0; steps < maxSteps; steps++) {
+    cursor = new Date(cursor.getTime() - stepMs);
+    if (evaluate(ast, { ...ctx, now: cursor, timeZone })) {
+      return cursor.toISOString();
+    }
+  }
+  return null;
+}
+
+export function findNextTrueMoment(
+  ast: AstNode,
+  ctx: EvalContext,
+): string | null {
+  const timeZone = ctx.timeZone ?? "Asia/Jakarta";
+  const { stepMs, maxSteps } = stepConfig(ast);
+  let cursor = new Date(ctx.now.getTime());
+  for (let steps = 0; steps < maxSteps; steps++) {
+    cursor = new Date(cursor.getTime() + stepMs);
+    if (evaluate(ast, { ...ctx, now: cursor, timeZone })) {
+      return cursor.toISOString();
+    }
+  }
+  return null;
+}
+
+/**
  * Arm a remind *before* the checklist item appears.
  * remindAt = one formula step (hour/day) before the next validity window.
  */

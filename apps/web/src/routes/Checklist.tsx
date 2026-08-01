@@ -995,41 +995,46 @@ export default function Checklist() {
                           {item.label}
                         </span>
                         <span
-                          className={`checklist-meta mt-0.5 block text-[11px] transition-colors duration-300 ${
+                          className={`checklist-meta mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] transition-colors duration-300 ${
                             pendingRemove
                               ? "text-emerald-600/80"
                               : "text-slate-400"
                           }`}
                         >
-                          {pendingRemove
-                            ? "Undo · disappearing soon"
-                            : describeWhen(
-                                item.formula,
-                                item.completionMode,
-                              )}
+                          {pendingRemove ? (
+                            "Undo · disappearing soon"
+                          ) : (
+                            <>
+                              <span className="rounded-full bg-slate-100/90 px-1.5 py-px text-[10px] font-medium tracking-wide text-slate-500">
+                                {modeBadge(item.completionMode)}
+                              </span>
+                              <span>
+                                {describeWhen(
+                                  item.formula,
+                                  item.completionMode,
+                                )}
+                              </span>
+                            </>
+                          )}
                         </span>
                       </span>
                     </button>
 
-                    <div className="checklist-card__actions flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
-                      {(item.canSnooze ?? item.completionMode === "once") &&
-                        !item.checked &&
-                        !pendingRemove && (
+                    {(item.canSnooze ?? item.completionMode === "once") &&
+                      !item.checked &&
+                      !pendingRemove && (
+                        <div className="checklist-card__actions flex shrink-0 items-start">
                           <button
                             type="button"
                             disabled={busyId !== null || snoozeOut || swipeOut}
                             title="Hide for now — comes back next time it should show"
                             onClick={() => snoozeItem(item)}
-                            className="hidden rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 active:scale-95 sm:inline-flex"
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 active:scale-95 sm:px-2.5 sm:py-1.5 sm:text-xs"
                           >
                             Later
                           </button>
-                        )}
-
-                      <span className="rounded-full bg-slate-100/90 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-500 backdrop-blur-sm">
-                        {modeBadge(item.completionMode)}
-                      </span>
-                    </div>
+                        </div>
+                      )}
                   </div>
 
                   {showProgress && (
@@ -1108,16 +1113,18 @@ export default function Checklist() {
                             >
                               {filler.label}
                             </span>
-                            <span className="checklist-meta mt-0.5 block text-[11px] text-slate-400">
-                              {describeWhen(
-                                filler.formula,
-                                filler.completionMode,
-                              )}
+                            <span className="checklist-meta mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+                              <span className="rounded-full bg-slate-100/90 px-1.5 py-px text-[10px] font-medium tracking-wide text-slate-500">
+                                {modeBadge(filler.completionMode)}
+                              </span>
+                              <span>
+                                {describeWhen(
+                                  filler.formula,
+                                  filler.completionMode,
+                                )}
+                              </span>
                             </span>
                           </span>
-                        </span>
-                        <span className="rounded-full bg-slate-100/90 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-500">
-                          {modeBadge(filler.completionMode)}
                         </span>
                       </div>
                     </div>
@@ -1218,7 +1225,7 @@ export default function Checklist() {
                 !holdMenuItem.checked && (
                   <button
                     type="button"
-                    className="sm:hidden"
+                    className="checklist-later-hold"
                     onClick={() => {
                       const target = holdMenuItem;
                       setHoldMenuItem(null);
